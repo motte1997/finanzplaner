@@ -50,13 +50,16 @@ function load() {
 }
 function migrate() {
   if (!state.urlaub.deposits) state.urlaub.deposits = [];
-  if (!state.urlaub.basis) state.urlaub.basis = "mittel";
+  state.urlaub.basis = "mittel";
   (state.urlaub.vacations || []).forEach(v => {
     if (!v.positions) {
       v.positions = [pos("Gesamtkosten", v.cost || 0, v.cost || 0, 0)];
       delete v.cost;
     }
     if (v.days == null) v.days = 0;
+    (v.positions || []).forEach(p => {   // Min/Max → ein geplanter Betrag (Mittelwert)
+      if (p.min !== p.max) { const m = Math.round(((p.min || 0) + (p.max || 0)) / 2 * 100) / 100; p.min = m; p.max = m; }
+    });
     if (v.draft == null) v.draft = false;
     if (v.travelers !== "Marcel" && v.travelers !== "Elena") v.travelers = "2";
     (v.positions || []).forEach(p => { p.name = mapVacPos(p.name); });
@@ -96,7 +99,6 @@ function save() {
   lastSer = ser;
   state.meta = { updatedAt: Date.now() };
   persistLocal();
-  scheduleAutosave();
   scheduleCloudPush();
 }
 
@@ -360,7 +362,7 @@ const pctLabelsPlugin = {
 };
 
 /* ---------- Rendering ---------- */
-function activeTab() { return document.querySelector(".tab.active")?.dataset.tab || "dashboard"; }
+function activeTab() { return currentTab; }
 
 function render() {
   save();
@@ -373,9 +375,11 @@ function render() {
   if (tab === "verlauf") renderVerlauf();
   if (tab === "versicherungen") renderVersicherungen();
   if (tab === "notizen") renderNotizen();
-  // Eingeklappte Blöcke anwenden
-  document.querySelectorAll(".block").forEach(b =>
-    b.classList.toggle("collapsed", !!(state.ui && state.ui.blocks && state.ui.blocks[b.dataset.block])));
+  applyBlocks();
+  applySegments();
+  convertLists();
+  const fab = document.getElementById("fab");
+  if (fab) fab.style.display = ["dashboard", "budget", "urlaub"].includes(tab) ? "" : "none";
 }
 
 /* ----- Dashboard ----- */
@@ -394,24 +398,26 @@ function renderDashboard() {
   document.getElementById("dashFilter").innerHTML = ["Gesamt", ...PERSONEN].map(p =>
     `<button class="btn seg-btn ${f === p ? "seg-active" : ""}" data-action="dash-filter" data-person="${p}">${p}</button>`).join("");
 
+  document.getElementById("heroCard").innerHTML =
+    `<div class="card hero ${rest < 0 ? "bad" : "good"}"><div class="kpi-label">Frei verfügbar / Monat</div>
+     <div class="hero-val">${eur(rest)}</div><div class="kpi-sub">nach Fixkosten, Sparen &amp; Konsum-Budget</div></div>`;
   const kpis = [
-    { label: "Einnahmen / Monat", val: eur(ti), sub: isAll ? "Marcel " + eur0(incomeOf("Marcel")) + " · Elena " + eur0(incomeOf("Elena")) : "nur " + f, cls: "" },
-    { label: "Fixkosten / Monat", val: eur(fix), sub: (isAll ? "" : "inkl. " + fmtPct.format(shareOf(f)) + " Anteil gemeinsam · ") + (ti > 0 ? fmtPct.format(fix / ti) + " der Einnahmen" : ""), cls: "" },
-    { label: "Sparrate / Monat", val: eur(sp), sub: "Sparquote " + fmtPct.format(q), cls: "good" },
-    { label: "Frei verfügbar", val: eur(rest), sub: "nach Fixkosten, Sparen & Konsum-Budget", cls: rest < 0 ? "bad" : "good" }
+    { label: "Einnahmen", val: eur0(ti), sub: isAll ? "M " + eur0(incomeOf("Marcel")) + " · E " + eur0(incomeOf("Elena")) : "nur " + f },
+    { label: "Fixkosten", val: eur0(fix), sub: ti > 0 ? fmtPct.format(fix / ti) + " der Einn." : "" },
+    { label: "Sparrate", val: eur0(sp), sub: "Quote " + fmtPct.format(q) }
   ];
   document.getElementById("kpiRow").innerHTML = kpis.map(k =>
-    `<div class="card kpi ${k.cls}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join("");
+    `<div class="card kpi"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join("");
 
-  // Warnungen
+  // Warnungen (als eine Zeile, aufklappbar)
   const warns = [];
   if (rest < 0) warns.push("Das Gesamtbudget ist negativ (" + eur(rest) + ") – Ausgaben oder Sparraten prüfen.");
   PERSONEN.forEach(p => { if (restOf(p) < 0) warns.push("Puffer von " + p + " ist negativ (" + eur(restOf(p)) + ")."); });
   vp.vacs.filter(v => !v.ok).forEach(v => warns.push("Urlaub „" + v.name + "“ ist mit aktueller Sparrate nicht erreichbar."));
   if (hp.target > 0 && hp.rate <= 0) warns.push("Für das Eigenheim-Ziel ist keine Sparrate hinterlegt.");
   document.getElementById("warnBox").innerHTML = warns.length
-    ? warns.map(w => `<div class="warn">⚠ ${esc(w)}</div>`).join("")
-    : `<div class="ok-msg">✓ Alles im grünen Bereich – keine Warnungen.</div>`;
+    ? `<details class="warn"><summary>⚠ ${warns.length} Hinweis${warns.length > 1 ? "e" : ""}</summary>${warns.map(w => `<div>${esc(w)}</div>`).join("")}</details>`
+    : `<div class="ok-msg">✓ Alles im grünen Bereich</div>`;
 
   // Sparziel-Fortschritt
   const goals = [];
@@ -504,7 +510,7 @@ function renderBudget() {
   state.costs.forEach(c => { (groups[c.category] = groups[c.category] || []).push(c); });
   const catOrder = state.categories.filter(c => groups[c]).concat(Object.keys(groups).filter(c => !state.categories.includes(c)));
   const groupHTML = catOrder.map(cat => {
-    const collapsed = !!state.ui.cats[cat];
+    const collapsed = !openCats.has(cat);
     return `
     <div class="cat-group">
       <div class="cat-head">
@@ -583,65 +589,72 @@ function selPerson(id, list, val, withGemeinsam) {
     `<option ${val === p ? "selected" : ""}>${p}</option>`).join("")}</select>`;
 }
 function delBtn(id, list) { return `<button class="btn-icon" title="Löschen" data-action="del" data-id="${id}" data-list="${list}">✕</button>`; }
-function dragCell() { return `<span class="drag-handle" title="Ziehen zum Sortieren">⠿</span>`; }
-function tableHTML(head, rows, footer, draggable) {
-  const h = draggable ? [""].concat(head) : head;
-  const rr = draggable ? rows.map(r => [dragCell()].concat(r)) : rows;
+function tableHTML(head, rows, footer) {
+  const h = head, rr = rows;
   return `<table class="tbl edit"><thead><tr>${h.map(x => `<th>${x}</th>`).join("")}</tr></thead>
   <tbody>${rr.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${h.length}" class="empty">Noch keine Einträge</td></tr>`}</tbody>
   ${footer ? `<tfoot><tr><td colspan="${h.length}">${footer}</td></tr></tfoot>` : ""}</table>`;
 }
 
 /* ----- Urlaub ----- */
+const openVacs = new Set();   // aufgeklappte Reisen (nur Anzeige, nicht synchronisiert)
+function fmtDate(iso) {
+  if (!iso) return "";
+  return new Date(iso + "T12:00:00").toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
 function vacCard(v, planInfo) {
   const t = vacTotals(v);
   const past = !v.draft && isPastVac(v);
+  const plan = t.min;                                   // geplante Gesamtkosten
+  const pct = plan > 0 ? Math.min(100, t.paid / plan * 100) : 0;
   const statusPill = v.draft
-    ? `<span class="pill" style="background:rgba(251,191,36,.15);color:var(--amber)">Entwurf – noch nicht gespeichert</span>`
-    : past
-      ? `<span class="pill" style="background:rgba(148,163,184,.15);color:var(--muted)">abgeschlossen</span>`
-      : planInfo
-        ? (planInfo.ok ? `<span class="pill ok">erreichbar</span>` : `<span class="pill bad">nicht erreichbar</span>`)
-        : "";
+    ? `<span class="pill" style="background:rgba(251,191,36,.15);color:var(--amber)">Entwurf</span>`
+    : past ? ""
+    : planInfo ? (planInfo.ok ? `<span class="pill ok">erreichbar</span>` : `<span class="pill bad">nicht erreichbar</span>`) : "";
+  const dates = v.start && v.end ? fmtDate(v.start) + " – " + fmtDate(v.end) + " · " + (v.days || 0) + " Tage" : "Zeitraum noch offen";
+  const isOpen = openVacs.has(v.id) || v.draft;
   const rows = (v.positions || []).map(p => `
     <tr>
-      <td>${dragCell()}</td>
       <td><select data-id="${p.id}" data-vac="${v.id}" data-list="vacpos" data-field="name" data-action="edit">${VAC_KATEGORIEN.map(k =>
         `<option ${p.name === k ? "selected" : ""}>${k}</option>`).join("")}</select></td>
       <td><input type="number" step="0.01" class="r" value="${p.min ?? 0}" data-id="${p.id}" data-vac="${v.id}" data-list="vacpos" data-field="min" data-action="edit"></td>
-      <td><input type="number" step="0.01" class="r" value="${p.max ?? 0}" data-id="${p.id}" data-vac="${v.id}" data-list="vacpos" data-field="max" data-action="edit"></td>
       <td><input type="number" step="0.01" class="r" value="${p.paid ?? 0}" data-id="${p.id}" data-vac="${v.id}" data-list="vacpos" data-field="paid" data-action="edit"></td>
       <td class="r mono">${past ? "—" : eur(posOpenBasis(p))}</td>
-      <td><button class="btn-icon" title="Position löschen" data-action="del-vacpos" data-id="${p.id}" data-vac="${v.id}">✕</button></td>
+      <td><button class="btn-icon" data-action="del-vacpos" data-id="${p.id}" data-vac="${v.id}">✕</button></td>
     </tr>`).join("");
+  const trav = v.travelers === "Marcel" || v.travelers === "Elena" ? v.travelers : "2";
   return `
   <div class="card vac-card ${past ? "vac-past" : ""}">
-    <div class="vac-head">
-      <button class="btn-icon chev-btn ${v.collapsed ? "rot" : ""}" data-action="toggle-vac" data-id="${v.id}" title="Details ein-/ausklappen">▾</button>
-      <input type="text" class="vac-name" value="${esc(v.name)}" data-id="${v.id}" data-list="vac" data-field="name" data-action="edit">
-      <label class="vac-days">von <input type="date" value="${esc(v.start || "")}" data-id="${v.id}" data-list="vac" data-field="start" data-action="edit"></label>
-      <label class="vac-days">bis <input type="date" value="${esc(v.end || "")}" data-id="${v.id}" data-list="vac" data-field="end" data-action="edit"></label>
-      <span class="chip">${v.days || 0} Tage</span>
-      <label class="vac-days">Reisende <select data-id="${v.id}" data-list="vac" data-field="travelers" data-action="edit">
-        <option value="2" ${v.travelers !== "Marcel" && v.travelers !== "Elena" ? "selected" : ""}>Zu zweit</option>
-        <option value="Marcel" ${v.travelers === "Marcel" ? "selected" : ""}>Marcel</option>
-        <option value="Elena" ${v.travelers === "Elena" ? "selected" : ""}>Elena</option>
-      </select></label>
-      ${statusPill}
-      ${v.draft ? `<button class="btn primary" data-action="save-vac" data-id="${v.id}">Speichern</button>` : ""}
-      ${!past && planInfo ? `<span class="hint" style="margin:0">in ${planInfo.months} Mon. · nötige Rate ${planInfo.needed === Infinity ? "–" : eur(planInfo.needed)}</span>` : ""}
-      <button class="btn-icon" title="Urlaub löschen" data-action="del" data-id="${v.id}" data-list="vac" style="margin-left:auto">✕</button>
+    <div class="vac-top" data-action="toggle-vac" data-id="${v.id}">
+      <div class="vac-title"><div class="vac-nm">${esc(v.name || "Neue Reise")}</div><div class="vac-dt">${dates}</div></div>
+      <div class="vac-amt"><b>${eur0(plan)}</b>${statusPill}</div>
     </div>
+    <div class="bar" style="margin:10px 0 8px"><div class="bar-fill" style="width:${pct}%"></div></div>
     <div class="vac-sums">
-      <span class="chip">Min ${eur(t.min)}</span><span class="chip">Max ${eur(t.max)}</span>
-      <span class="chip chip-paid">Bezahlt ${eur(t.paid)}</span>
-      ${past ? "" : `<span class="chip ${t.open > 0 ? "chip-open" : ""}">Offen ${eur(t.open)}</span>`}
-      ${v.days > 0 ? `<span class="chip">${eur((past ? t.paid : t.paid + t.open) / v.days)} / Tag</span>` : ""}
+      <span class="chip chip-paid">Bezahlt ${eur0(t.paid)}</span>
+      ${past ? "" : `<span class="chip ${t.open > 0 ? "chip-open" : ""}">Offen ${eur0(t.open)}</span>`}
+      ${v.days > 0 ? `<span class="chip">${eur0((past ? t.paid : t.paid + t.open) / v.days)} / Tag</span>` : ""}
+      ${!past && planInfo ? `<span class="chip">nötige Rate ${planInfo.needed === Infinity ? "–" : eur0(planInfo.needed)}</span>` : ""}
     </div>
-    ${v.collapsed ? "" : `
-    <table class="tbl edit"><thead><tr><th></th><th>Position</th><th>Min</th><th>Max</th><th>Bezahlt</th><th>Offen*</th><th></th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="7" class="empty">Noch keine Positionen</td></tr>`}</tbody></table>
-    <button class="btn" style="margin-top:8px" data-action="add-vacpos" data-vac="${v.id}">+ Position</button>`}
+    ${isOpen ? `
+    <table class="tbl edit"><thead><tr><th>Position</th><th>Geplant €</th><th>Bezahlt €</th><th>Offen*</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="5" class="empty">Noch keine Positionen</td></tr>`}</tbody></table>
+    <div class="btn-row">
+      <button class="btn" data-action="add-vacpos" data-vac="${v.id}">+ Position</button>
+      <button class="btn" data-action="vac-edit" data-id="${v.id}">Reise bearbeiten</button>
+      ${v.draft ? `<button class="btn primary" data-action="save-vac" data-id="${v.id}">Speichern</button>` : ""}
+    </div>` : ""}
+    <div class="sheet-src" id="vsrc-${v.id}" hidden data-title="Reise bearbeiten">
+      <label class="lbl">Name<input type="text" value="${esc(v.name)}" data-id="${v.id}" data-list="vac" data-field="name" data-action="edit"></label>
+      <label class="lbl">Von<input type="date" value="${esc(v.start || "")}" data-id="${v.id}" data-list="vac" data-field="start" data-action="edit"></label>
+      <label class="lbl">Bis<input type="date" value="${esc(v.end || "")}" data-id="${v.id}" data-list="vac" data-field="end" data-action="edit"></label>
+      <label class="lbl">Reisende<select data-id="${v.id}" data-list="vac" data-field="travelers" data-action="edit">
+        <option value="2" ${trav === "2" ? "selected" : ""}>Zu zweit</option>
+        <option value="Marcel" ${trav === "Marcel" ? "selected" : ""}>Marcel</option>
+        <option value="Elena" ${trav === "Elena" ? "selected" : ""}>Elena</option></select></label>
+      ${v.draft ? `<button class="btn primary" data-action="save-vac" data-id="${v.id}">Speichern</button>` : ""}
+      <button class="btn danger" data-action="del" data-id="${v.id}" data-list="vac">Reise löschen</button>
+    </div>
   </div>`;
 }
 
@@ -674,11 +687,6 @@ function renderUrlaub() {
   document.getElementById("urlaubForecast").textContent = eur(endNext);
   document.getElementById("urlaubForecast").className = "kpi-value " + (endNext < 0 ? "neg" : "pos");
   document.getElementById("urlaubForecastSub").textContent = "Ende " + yNow + ": " + eur(endThis) + " · inkl. Sparrate, Sondereinnahmen & geplanter Urlaube";
-
-  const b = state.urlaub.basis || "mittel";
-  document.getElementById("basisBox").innerHTML = [["min", "Minimum"], ["mittel", "Mittelwert"], ["max", "Maximum"]].map(([val, lab]) =>
-    `<label class="radio"><input type="radio" name="vacbasis" value="${val}" ${b === val ? "checked" : ""}> ${lab}</label>`).join("") +
-    `<span class="hint" style="margin:0">Basis für „Offen“, Prognose und nötige Rate</span>`;
 
   // Urlaubskarten: geplante zuerst (chronologisch), dann abgeschlossene
   // Entwürfe bleiben oben an fester Position; einsortiert wird erst nach "Speichern"
@@ -996,7 +1004,7 @@ function renderZukunft() {
   });
 
   /* --- Budgetplanung ab Stichtag --- */
-  const fixRaw = z.fixkosten.reduce((s, f) => s + (f.amount || 0), 0);
+  const fixRaw = totalCosts();   // Fixkosten aus dem Budget-Tab
   const fixTotal = fixRaw * (1 + (z.fixInflation || 0) / 100);
   document.getElementById("zfixInfl").value = z.fixInflation;
   const gross = z.budget.reduce((s, it) => s + Math.max(0, effBudgetAmount(it, fixTotal)), 0);
@@ -1011,37 +1019,16 @@ function renderZukunft() {
     brows.map(({ it, val, run }) => [
       inp("text", it.id, "zbudget", "name", it.name),
       it.link === "fixkosten"
-        ? `<span class="mono neg" title="Automatisch: Summe der Fixkosten-Liste unten">${eur(val)} 🔗</span>`
+        ? `<span class="mono neg" title="Automatisch: Fixkosten aus dem Budget-Tab inkl. Inflationsfaktor">${eur(val)} 🔗</span>`
         : inp("number", it.id, "zbudget", "amount", it.amount),
       `<span class="mono">${val < 0 && gross > 0 ? fmtPct.format(-val / gross) : ""}</span>`,
       `<span class="mono ${run < 0 ? "neg" : ""}">${eur(run)}</span>`,
       inp("text", it.id, "zbudget", "note", it.note),
       delBtn(it.id, "zbudget")
     ]),
-    `Restbudget: <b>${eur(running)}</b> / Monat · Reihenfolge per ⠿ sortierbar, Zwischensummen laufen mit`,
+    `Restbudget: <b>${eur(running)}</b> / Monat`,
     true
   );
-  /* --- Fixkosten-Detail --- */
-  document.getElementById("zFixTable").innerHTML = tableHTML(
-    ["Position", "Betrag", "Bemerkung", ""],
-    z.fixkosten.map(f => [
-      inp("text", f.id, "zfix", "name", f.name),
-      inp("number", f.id, "zfix", "amount", f.amount),
-      inp("text", f.id, "zfix", "note", f.note),
-      delBtn(f.id, "zfix")
-    ]),
-    `Summe: ${eur(fixRaw)} + ${z.fixInflation} % Inflationsfaktor = <b>${eur(fixTotal)}</b> / Monat – fließt automatisch in die 🔗-Zeile der Budgetplanung`,
-    true
-  );
-  makeChart("chartZFix", {
-    type: "doughnut",
-    data: {
-      labels: z.fixkosten.map(f => f.name),
-      datasets: [{ data: z.fixkosten.map(f => f.amount || 0), backgroundColor: z.fixkosten.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 0 }]
-    },
-    options: { plugins: { legend: { position: "right", labels: { color: C.text, boxWidth: 12 } }, tooltip: { callbacks: { label: ctx => ctx.label + ": " + eur(ctx.parsed) } } }, cutout: "55%" }
-  });
-
   /* --- Hauskauf-Simulation --- */
   const h = z.haus;
   document.getElementById("hausRate").value = h.rate;
@@ -1240,14 +1227,17 @@ function listRef(name) {
 document.addEventListener("change", e => {
   const t = e.target;
   if (t.name === "split") { state.settings.splitMode = t.value; render(); return; }
-  if (t.name === "vacbasis") { state.urlaub.basis = t.value; render(); return; }
   if (t.dataset.action === "split-custom") { state.settings.customMarcel = num(t.value); render(); return; }
   if (t.dataset.action === "vers-flag") { state.versicherungen[t.dataset.flag] = t.checked; render(); return; }
   if (t.dataset.action === "edit") {
     if (t.dataset.list === "vacpos") {
       const v = state.urlaub.vacations.find(x => x.id === t.dataset.vac);
       const p = v && (v.positions || []).find(x => x.id === t.dataset.id);
-      if (p) p[t.dataset.field] = (t.type === "number") ? num(t.value) : t.value;
+      if (p) {
+        const val = (t.type === "number") ? num(t.value) : t.value;
+        p[t.dataset.field] = val;
+        if (t.dataset.field === "min") p.max = val;      // geplanter Betrag = min = max
+      }
       render(); return;
     }
     if (t.dataset.list === "snap") {
@@ -1289,13 +1279,14 @@ document.addEventListener("click", e => {
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-action],[data-tab]");
   if (!t) return;
-  if (t.dataset.tab) {
-    document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === t));
-    render(); window.scrollTo(0, 0);
-    if (t.scrollIntoView) t.scrollIntoView({ inline: "center", block: "nearest" });
-    return;
-  }
+  if (t.dataset.tab) { gotoTab(t.dataset.tab); return; }
   const a = t.dataset.action;
+  if (a && a.startsWith("add-")) {
+    const blk = t.closest(".block");
+    if (blk) setBlockOpen(blk, true);
+    if (a !== "add-vac") armNewRow();
+  }
+  if (a === "del" || a === "del-vacpos" || a === "del-snap") setTimeout(closeSheet, 0);
   if (a === "del") {
     const arr = listRef(t.dataset.list);
     const i = arr.findIndex(x => x.id === t.dataset.id);
@@ -1307,13 +1298,13 @@ document.addEventListener("click", e => {
   }
   if (a === "add-income") { state.incomes.push({ id: uid(), name: "Neue Einnahme", person: "Marcel", amount: 0 }); render(); }
   if (a === "add-cost") {
-    const cat = prompt("Kategorie (neu oder bestehend):", state.categories[0]);
-    if (cat == null) return;
-    if (cat && !state.categories.includes(cat)) state.categories.push(cat);
-    state.costs.push({ id: uid(), name: "Neue Position", person: "Gemeinsam", category: cat || "Sonstiges", amount: 0, rhythm: "monatlich" });
+    openCats.add("Sonstiges");
+    if (!state.categories.includes("Sonstiges")) state.categories.push("Sonstiges");
+    state.costs.push({ id: uid(), name: "Neue Position", person: "Gemeinsam", category: "Sonstiges", amount: 0, rhythm: "monatlich" });
     render();
   }
   if (a === "add-cost-cat") {
+    openCats.add(t.dataset.cat || "Sonstiges");
     state.costs.push({ id: uid(), name: "Neue Position", person: "Gemeinsam", category: t.dataset.cat || "Sonstiges", amount: 0, rhythm: "monatlich" });
     render();
   }
@@ -1327,12 +1318,13 @@ document.addEventListener("click", e => {
     nv.draft = true; nv.start = ""; nv.end = ""; nv.travelers = "2";
     state.urlaub.vacations.push(nv);
     render();
+    openSrcSheet(document.getElementById("vsrc-" + nv.id));
   }
   if (a === "save-vac") {
     const v = state.urlaub.vacations.find(x => x.id === t.dataset.id);
     if (v) {
       if (!v.start || !v.end) { alert("Bitte zuerst den Zeitraum (von/bis) auswählen."); return; }
-      v.draft = false;
+      v.draft = false; closeSheet();
       render();
     }
   }
@@ -1358,18 +1350,16 @@ document.addEventListener("click", e => {
   if (a === "dash-filter") { state.settings.dashFilter = t.dataset.person; render(); }
   if (a === "toggle-block") {
     if (e.target.closest("input,select") || (e.target.closest("button") && !e.target.closest("[data-action='toggle-block']"))) return;
-    state.ui.blocks[t.dataset.key] = !state.ui.blocks[t.dataset.key];
-    render();
+    toggleBlock(t.closest(".block"));
   }
   if (a === "toggle-vac") {
-    const v = state.urlaub.vacations.find(x => x.id === t.dataset.id);
-    if (v) { v.collapsed = !v.collapsed; render(); }
-  }
-  if (a === "toggle-cat") {
-    state.ui.cats[t.dataset.cat] = !state.ui.cats[t.dataset.cat];
+    if (openVacs.has(t.dataset.id)) openVacs.delete(t.dataset.id); else openVacs.add(t.dataset.id);
     render();
   }
-  if (a === "autosave") { connectAutosave(); }
+  if (a === "toggle-cat") {
+    if (openCats.has(t.dataset.cat)) openCats.delete(t.dataset.cat); else openCats.add(t.dataset.cat);
+    render();
+  }
   if (a === "settings") openSettings();
   if (a === "settings-close") closeSettings();
   if (a === "sync-connect") connectSync();
@@ -1434,189 +1424,6 @@ bindDirect("retYears", v => state.alters.years = Math.max(1, Math.round(v)));
 bindDirect("versWohnflaeche", v => state.versicherungen.wohnflaeche = Math.max(0, Math.round(v)));
 bindDirect("retZins", v => state.alters.zins = v);
 bindDirect("retInfl", v => state.alters.inflation = v);
-
-/* ---------- Drag & Drop: Zeilen per Griff sortieren ---------- */
-let dragSrc = null;
-document.addEventListener("mousedown", e => {
-  const h = e.target.closest(".drag-handle");
-  if (h) { const tr = h.closest("tr"); if (tr) tr.draggable = true; }
-});
-document.addEventListener("mouseup", () => {
-  document.querySelectorAll('tr[draggable="true"]').forEach(tr => { if (tr !== dragSrc) tr.draggable = false; });
-});
-document.addEventListener("dragstart", e => {
-  const tr = e.target.closest ? e.target.closest("tr") : null;
-  if (tr && tr.draggable) {
-    dragSrc = tr;
-    tr.classList.add("dragging");
-    e.dataTransfer.effectAllowed = "move";
-    try { e.dataTransfer.setData("text/plain", ""); } catch (err) { }
-  }
-});
-document.addEventListener("dragover", e => {
-  if (!dragSrc) return;
-  const tr = e.target.closest("tr");
-  if (tr && tr !== dragSrc && tr.parentElement === dragSrc.parentElement && tr.parentElement.tagName === "TBODY") {
-    e.preventDefault();
-    const rect = tr.getBoundingClientRect();
-    const after = e.clientY > rect.top + rect.height / 2;
-    tr.parentElement.insertBefore(dragSrc, after ? tr.nextSibling : tr);
-  }
-});
-document.addEventListener("drop", e => { if (dragSrc) e.preventDefault(); });
-document.addEventListener("dragend", () => {
-  if (!dragSrc) return;
-  const tbody = dragSrc.parentElement;
-  const ref = dragSrc.querySelector("[data-list]");
-  dragSrc.classList.remove("dragging");
-  dragSrc.draggable = false;
-  const src = dragSrc; dragSrc = null;
-  if (!ref || !tbody) return;
-  const listName = ref.dataset.list;
-  let arr;
-  if (listName === "vacpos") {
-    const v = state.urlaub.vacations.find(x => x.id === ref.dataset.vac);
-    arr = v && v.positions;
-  } else arr = listRef(listName);
-  if (!arr) return;
-  // Neue Reihenfolge aus dem DOM ablesen (nur Zeilen dieses tbody)
-  const orderIds = [...tbody.querySelectorAll("tr")].map(r => {
-    const el = r.querySelector("[data-list]");
-    return el ? el.dataset.id : null;
-  }).filter(Boolean);
-  const idset = new Set(orderIds);
-  const subset = orderIds.map(id => arr.find(x => x.id === id)).filter(Boolean);
-  let k = 0;
-  for (let i = 0; i < arr.length; i++) if (idset.has(arr[i].id)) arr[i] = subset[k++];
-  render();
-});
-
-/* Kategorie-Feld in Kostentabellen: als Text mit datalist – nachträglich einfügen */
-document.addEventListener("dblclick", e => {
-  // Doppelklick auf Kategorienamen: umbenennen
-  const h = e.target.closest(".cat-name");
-  if (!h) return;
-  const oldName = h.textContent;
-  const nn = prompt("Kategorie umbenennen:", oldName);
-  if (nn && nn !== oldName) {
-    state.costs.forEach(c => { if (c.category === oldName) c.category = nn; });
-    const i = state.categories.indexOf(oldName);
-    if (i >= 0) state.categories[i] = nn; else state.categories.push(nn);
-    render();
-  }
-});
-
-/* ============================================================
-   Autosave in JSON-Datei (File System Access API, Chrome/Edge)
-   Datei im Google-Drive-Ordner wählen → automatische Cloud-Sync
-   ============================================================ */
-let autosaveHandle = null, autosaveTimer = null, autosaveState = "aus"; // aus | aktiv | reconnect
-function autosaveSupported() { return typeof window !== "undefined" && "showSaveFilePicker" in window; }
-
-function setAutosaveUI() {
-  const btn = document.getElementById("autosaveBtn");
-  if (!btn) return;
-  btn.classList.toggle("active-save", autosaveState === "aktiv");
-  btn.innerHTML = autosaveState === "aktiv" ? "● Autosave aktiv"
-    : autosaveState === "reconnect" ? "◌ Autosave neu verbinden"
-    : "○ Autosave einrichten";
-  btn.title = autosaveState === "aktiv"
-    ? "Speichert nach jeder Änderung automatisch in: " + (autosaveHandle && autosaveHandle.name || "Datei")
-    : "Einmalig eine JSON-Datei wählen (z. B. im Google-Drive-Ordner) – danach wird jede Änderung automatisch dort gespeichert.";
-}
-
-function idbOpen() {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open("finanzplaner", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("kv");
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
-}
-async function idbSet(k, v) {
-  try {
-    const db = await idbOpen();
-    await new Promise((res, rej) => {
-      const tx = db.transaction("kv", "readwrite");
-      tx.objectStore("kv").put(v, k);
-      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
-    });
-  } catch (e) { /* IndexedDB nicht verfügbar – Autosave gilt dann nur für diese Sitzung */ }
-}
-async function idbGet(k) {
-  try {
-    const db = await idbOpen();
-    return await new Promise((res, rej) => {
-      const rq = db.transaction("kv").objectStore("kv").get(k);
-      rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
-    });
-  } catch (e) { return null; }
-}
-
-async function connectAutosave() {
-  if (!autosaveSupported()) {
-    alert("Automatisches Speichern in eine Datei unterstützt dein Browser leider nicht.\nBitte Chrome oder Edge verwenden – oder weiterhin den Export-Button nutzen.");
-    return;
-  }
-  try {
-    // Fall 1: Handle aus früherer Sitzung – nur Berechtigung erneuern
-    if (autosaveState === "reconnect" && autosaveHandle) {
-      const p = await autosaveHandle.requestPermission({ mode: "readwrite" });
-      if (p === "granted") { autosaveState = "aktiv"; setAutosaveUI(); writeAutosave(); return; }
-    }
-    // Fall 2: Datei (neu) wählen
-    const h = await window.showSaveFilePicker({
-      suggestedName: "finanzplan-daten.json",
-      types: [{ description: "JSON-Datei", accept: { "application/json": [".json"] } }]
-    });
-    // Enthält die Datei bereits Daten? Dann anbieten, sie zu laden.
-    try {
-      const f = await h.getFile();
-      if (f.size > 0) {
-        const data = JSON.parse(await f.text());
-        if (data && data.incomes && JSON.stringify(data) !== JSON.stringify(state) &&
-            confirm("Die gewählte Datei enthält bereits Finanzplan-Daten.\n\nOK = Daten aus der Datei laden\nAbbrechen = Datei mit den aktuellen Daten überschreiben")) {
-          state = data; migrate();
-        }
-      }
-    } catch (e) { /* neue oder fremde Datei – wird überschrieben */ }
-    autosaveHandle = h;
-    autosaveState = "aktiv";
-    await idbSet("autosaveHandle", h);
-    setAutosaveUI();
-    render();
-    writeAutosave();
-  } catch (e) { /* Auswahl abgebrochen */ }
-}
-
-async function writeAutosave() {
-  if (autosaveState !== "aktiv" || !autosaveHandle) return;
-  try {
-    const w = await autosaveHandle.createWritable();
-    await w.write(JSON.stringify(state, null, 2));
-    await w.close();
-  } catch (e) {
-    autosaveState = "reconnect";
-    setAutosaveUI();
-  }
-}
-function scheduleAutosave() {
-  if (autosaveState !== "aktiv") return;
-  clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(writeAutosave, 800); // gebündelt speichern
-}
-async function restoreAutosave() {
-  setAutosaveUI();
-  if (!autosaveSupported() || typeof indexedDB === "undefined") return;
-  const h = await idbGet("autosaveHandle");
-  if (!h) return;
-  autosaveHandle = h;
-  try {
-    const p = await h.queryPermission({ mode: "readwrite" });
-    autosaveState = p === "granted" ? "aktiv" : "reconnect";
-  } catch (e) { autosaveState = "reconnect"; }
-  setAutosaveUI();
-}
 
 /* ============================================================
    Cloud-Sync über GitHub (Contents-API, privates Daten-Repo)
@@ -1816,12 +1623,233 @@ function initCloudAndLock() {
     if (syncConfigured()) { if (syncDirty) syncPushNow(); else syncPull(false); }
   });
   window.addEventListener("online", () => { if (syncConfigured()) { if (syncDirty) syncPushNow(); else syncPull(false); } });
-  if (!autosaveSupported()) { const b = document.getElementById("autosaveRow"); if (b) b.style.display = "none"; }
   if (syncConfigured()) syncPull(false);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => { /* ohne SW weiter nutzbar */ });
   }
 }
+
+/* ============================================================
+   UI-Schicht: Navigation, Akkordeon-Blöcke, Listenansicht,
+   Bearbeiten-Fenster (Bottom-Sheet), „+“-Schnellbutton
+   ============================================================ */
+const MEHR_TABS = ["mehr", "verlauf", "versicherungen", "notizen"];
+let currentTab = "dashboard";
+const openCats = new Set();                    // aufgeklappte Fixkosten-Kategorien (nur Anzeige)
+const blockState = {};                         // Block -> offen/zu (nur Anzeige, nicht synchronisiert)
+const ACCORDION = { budget: "b-summary", urlaub: "u-planned" };   // Panel -> Standard-Block (immer nur einer offen)
+const DEFAULT_CLOSED = ["d-charts", "v-chart", "vers-rules"];
+let zSeg = "vermoegen";
+
+function gotoTab(tab) {
+  closeSheet();
+  currentTab = tab;
+  const group = MEHR_TABS.includes(tab) ? "mehr" : tab;
+  document.querySelectorAll("nav .tab").forEach(x => x.classList.toggle("active", x.dataset.tab === group));
+  render();
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Blöcke ---------- */
+function panelOf(b) { const p = b.closest(".panel"); return p ? p.id.slice(6) : ""; }
+function blockOpen(b) {
+  const key = b.dataset.block, p = panelOf(b);
+  if (p === "zukunft") return true;
+  if (key in blockState) return blockState[key];
+  if (ACCORDION[p]) return key === ACCORDION[p];
+  return !DEFAULT_CLOSED.includes(key);
+}
+function setBlockOpen(b, open) {
+  const p = panelOf(b);
+  if (open && ACCORDION[p]) document.querySelectorAll("#panel-" + p + " .block").forEach(x => { blockState[x.dataset.block] = false; });
+  blockState[b.dataset.block] = open;
+}
+function toggleBlock(b) {
+  if (!b || panelOf(b) === "zukunft") return;
+  setBlockOpen(b, !blockOpen(b));
+  render();
+}
+function applyBlocks() {
+  document.querySelectorAll(".block").forEach(b => b.classList.toggle("collapsed", !blockOpen(b)));
+}
+function applySegments() {
+  document.querySelectorAll("#panel-zukunft [data-seg]:not(.seg-btn)").forEach(el => {
+    if (el.id === "zSeg") return;
+    el.hidden = !el.dataset.seg.split(" ").includes(zSeg);
+  });
+  document.querySelectorAll("#zSeg .seg-btn").forEach(b => b.classList.toggle("seg-active", b.dataset.seg === zSeg));
+}
+
+/* ---------- Listenansicht statt Tabellen ---------- */
+let newRowArmed = false;
+const knownRows = new Set();
+function armNewRow() { newRowArmed = true; }
+const LIST_CFG = {
+  costGroups: { amt: "mono" },
+  zAssetTable: { amt: "mono-last", subNums: [0] },
+  versTable: { amt: "mono", pref: "sel" },
+  snapTable: { amt: null, subNums: [0, 1, 2] }
+};
+function cfgFor(table) {
+  const host = table.closest("[id]");
+  if (host && LIST_CFG[host.id]) return LIST_CFG[host.id];
+  const l = table.querySelector("[data-list]");
+  if (l && l.dataset.list === "vacpos") return { pref: "sel", subNums: [1] };
+  return {};
+}
+function selText(s) { return s.options[s.selectedIndex] ? s.options[s.selectedIndex].text : s.value; }
+function fmtAmt(v) { return Number.isInteger(+v) ? eur0(v) : eur(v); }
+function dateLabel(d) { return d.value ? (d.type === "month" ? ymLabel(d.value) : fmtDate(d.value)) : ""; }
+function rowInfo(tr, ths, cfg) {
+  const texts = [...tr.querySelectorAll("input[type=text]")];
+  const sels = [...tr.querySelectorAll("select")];
+  const nums = [...tr.querySelectorAll("input[type=number]")];
+  const dates = [...tr.querySelectorAll("input[type=month],input[type=date]")];
+  let monos = [...tr.querySelectorAll(".mono")];
+  const th = el => { const td = el.closest("td"); return td ? (ths[td.cellIndex] || "") : ""; };
+  let label = "", usedSel = null, usedDate = null, usedText = null;
+  if (cfg.pref === "sel" && sels[0]) { usedSel = sels[0]; label = selText(sels[0]); }
+  else if (texts[0] && texts[0].value.trim()) { usedText = texts[0]; label = texts[0].value.trim(); }
+  else if (sels[0]) { usedSel = sels[0]; label = selText(sels[0]); }
+  else if (monos[0]) { label = monos[0].textContent.trim(); monos = monos.slice(1); }
+  else if (dates[0]) { usedDate = dates[0]; label = dateLabel(dates[0]); }
+  if (!label) label = "(ohne Namen)";
+  // Betrag
+  const mode = cfg.amt === undefined ? "num" : cfg.amt;
+  let amt = "", usedMono = -1, usedNum = -1;
+  if (mode === "mono" && monos.length) { amt = monos[0].textContent.trim(); usedMono = 0; }
+  else if (mode === "mono-last" && monos.length) { usedMono = monos.length - 1; amt = monos[usedMono].textContent.trim(); }
+  else if (mode === "num") {
+    if (nums.length) { amt = fmtAmt(num(nums[0].value)); usedNum = 0; }
+    else if (monos.length) { amt = monos[0].textContent.trim(); usedMono = 0; }
+  }
+  // Zusatzzeile
+  const parts = [];
+  if (cfg.pref === "sel" && texts[0] && texts[0].value.trim()) parts.push(texts[0].value.trim());
+  sels.forEach(s => { if (s !== usedSel) parts.push(selText(s)); });
+  dates.forEach(d => { if (d !== usedDate) { const t = dateLabel(d); if (t) parts.push(t); } });
+  (cfg.subNums || []).forEach(i => { if (nums[i] && i !== usedNum) parts.push(th(nums[i]).replace(/[€*]/g, "").trim() + " " + fmtAmt(num(nums[i].value))); });
+  monos.forEach((m, i) => { if (i !== usedMono) parts.push((th(m).replace(/\*$/, "") + " " + m.textContent.trim()).trim()); });
+  return { label, amt, sub: parts.filter(Boolean).slice(0, 4).join(" · ") };
+}
+function convertLists() {
+  const panel = document.getElementById("panel-" + currentTab);
+  if (!panel) return;
+  let newest = null;
+  panel.querySelectorAll("table.tbl.edit").forEach(table => {
+    const cfg = cfgFor(table);
+    const ths = [...table.querySelectorAll("thead th")].map(x => x.textContent.trim());
+    const list = document.createElement("div");
+    list.className = "list";
+    [...table.tBodies[0].rows].forEach(tr => {
+      if (tr.querySelector(".empty")) { list.insertAdjacentHTML("beforeend", `<div class="list-empty">Noch keine Einträge</div>`); return; }
+      const ctl = tr.querySelector("input,select");
+      const info = rowInfo(tr, ths, cfg);
+      const el = document.createElement("div");
+      el.className = "lrow" + (ctl ? "" : " static");
+      el.innerHTML = `<div class="lmain"><div class="lname">${esc(info.label)}</div>${info.sub ? `<div class="lsub">${esc(info.sub)}</div>` : ""}</div>` +
+        (info.amt ? `<div class="lamt">${esc(info.amt)}</div>` : "") + (ctl ? `<span class="lchev">›</span>` : "");
+      if (ctl) {
+        el._tr = tr; el._ths = ths; el._title = info.label;
+        const key = (ctl.dataset.list || "") + ":" + (ctl.dataset.id || "");
+        if (!knownRows.has(key)) { knownRows.add(key); if (newRowArmed) newest = el; }
+      }
+      list.appendChild(el);
+    });
+    if (table.tFoot && table.tFoot.rows[0]) list.insertAdjacentHTML("beforeend", `<div class="list-foot">${table.tFoot.rows[0].cells[0].innerHTML}</div>`);
+    table.hidden = true;
+    table.insertAdjacentElement("afterend", list);
+  });
+  if (newRowArmed && newest) openRowSheet(newest._tr, newest._ths, newest._title);
+  newRowArmed = false;
+}
+
+/* ---------- Bearbeiten-Fenster ---------- */
+function showSheet(title) {
+  document.getElementById("sheetTitle").textContent = title || "";
+  document.getElementById("sheet").classList.add("open");
+  document.body.classList.add("sheet-open");
+}
+function closeSheet() {
+  const sh = document.getElementById("sheet");
+  if (!sh || !sh.classList.contains("open")) return;
+  const ae = document.activeElement;
+  if (ae && sh.contains(ae) && ae.blur) ae.blur();     // letzte Eingabe noch übernehmen
+  sh.classList.remove("open");
+  document.body.classList.remove("sheet-open");
+  document.getElementById("sheetBody").innerHTML = "";
+}
+function cloneControl(src, host) {
+  const c = src.cloneNode(true);
+  c.querySelectorAll && c.querySelectorAll("input,select").forEach((x, i) => { const o = src.querySelectorAll("input,select")[i]; if (o) x.value = o.value; });
+  if (/^(INPUT|SELECT)$/.test(src.tagName)) c.value = src.value;
+  host.appendChild(c);
+}
+function openRowSheet(tr, ths, title) {
+  const body = document.getElementById("sheetBody");
+  body.innerHTML = "";
+  [...tr.cells].forEach((td, i) => {
+    const ctl = td.querySelector("input,select");
+    if (!ctl) return;
+    const lab = document.createElement("label");
+    lab.className = "lbl sheet-field";
+    lab.appendChild(document.createTextNode((ths[i] || "").replace(/\*$/, "")));
+    cloneControl(ctl, lab);
+    body.appendChild(lab);
+  });
+  const del = tr.querySelector("button[data-action^='del']");
+  if (del) {
+    const b = document.createElement("button");
+    b.className = "btn danger sheet-del"; b.textContent = "Eintrag löschen";
+    for (const k in del.dataset) b.dataset[k] = del.dataset[k];
+    body.appendChild(b);
+  }
+  showSheet(title);
+}
+function openSrcSheet(src) {
+  if (!src) return;
+  const body = document.getElementById("sheetBody");
+  body.innerHTML = "";
+  [...src.children].forEach(ch => { cloneControl(ch, body); const c = body.lastChild; if (c.classList && c.tagName === "LABEL") c.classList.add("sheet-field"); if (c.tagName === "BUTTON") c.classList.add("sheet-del"); });
+  showSheet(src.dataset.title || "");
+}
+
+/* ---------- „+“-Schnellbutton ---------- */
+const FAB_ITEMS = [
+  ["Einnahme", "budget", "add-income"], ["Fixkosten-Position", "budget", "add-cost"], ["Sparrate", "budget", "add-saving"],
+  ["Konsum-Budget", "budget", "add-konsum"], ["Zusatzeinnahme", "budget", "add-extra"],
+  ["Urlaub planen", "urlaub", "add-vac"], ["Sondereinnahme für Urlaubstopf", "urlaub", "add-vacdep"]
+];
+function openFab() {
+  document.getElementById("sheetBody").innerHTML = FAB_ITEMS.map((it, i) => `<button class="btn fab-item" data-fab="${i}">${it[0]}</button>`).join("");
+  showSheet("Neu hinzufügen");
+}
+
+document.addEventListener("click", e => {
+  const lr = e.target.closest(".lrow");
+  if (lr && lr._tr) { openRowSheet(lr._tr, lr._ths, lr._title); return; }
+  const t = e.target.closest("[data-action],[data-fab]");
+  if (!t) { if (e.target.id === "sheet") closeSheet(); return; }
+  if (t.dataset.fab != null) {
+    const it = FAB_ITEMS[+t.dataset.fab];
+    closeSheet(); gotoTab(it[1]);
+    const btn = document.querySelector(`#panel-${it[1]} [data-action="${it[2]}"]`);
+    if (btn) btn.click();
+    return;
+  }
+  const a = t.dataset.action;
+  if (a === "fab") openFab();
+  if (a === "sheet-close") closeSheet();
+  if (a === "zseg") { zSeg = t.dataset.seg; render(); }
+  if (a === "vac-edit") openSrcSheet(document.getElementById("vsrc-" + t.dataset.id));
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+// Zurück-Leisten für Unterseiten unter „Mehr“
+["verlauf", "versicherungen", "notizen"].forEach(id => {
+  const p = document.getElementById("panel-" + id);
+  if (p) p.insertAdjacentHTML("afterbegin", `<button class="backbar" data-tab="mehr">‹ Mehr</button>`);
+});
 
 /* ---------- Init ---------- */
 // "Eigenheim & Vorsorge" in den Zukunft-Tab integrieren (Blöcke umziehen)
@@ -1844,5 +1872,4 @@ Chart.defaults.color = C.text;
 Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
 load();
 render();
-restoreAutosave();
 initCloudAndLock();

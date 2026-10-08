@@ -35,6 +35,13 @@ Alte Version (Finanzplaner_v2.html) öffnen → **Export** → in der neuen App 
 - **iPhone/Safari:** Teilen-Symbol → *Zum Home-Bildschirm*.
 Danach PIN setzen (⚙ → PIN-Sperre).
 
+## Bedienung (v2)
+- Unten 5 Tabs: Übersicht, Budget, Urlaub, Zukunft, Mehr (Verlauf, Versicherungen, Notizen, Einstellungen, Sperren).
+- Einträge erscheinen als Liste; Antippen öffnet das Bearbeiten-Fenster. Der **＋**-Button legt neue Einträge an.
+- Budget/Urlaub: immer nur ein Bereich aufgeklappt. Zukunft: Unterreiter Vermögen / Eigenheim / Vorsorge / Budget.
+- Urlaub: ein geplanter Betrag je Position (statt Min/Max). Bestehende Min/Max-Werte werden beim ersten Laden gemittelt.
+- Budgetplanung (Zukunft) nutzt die aktuellen Fixkosten aus dem Budget-Tab × Inflationsfaktor (eigene Fixkostenliste entfällt).
+
 ## Verhalten
 - Änderungen werden ~2 s nach der Eingabe in die Cloud geschrieben; beim Öffnen/Zurückkehren wird der Cloud-Stand geholt. „Neuester Stand gewinnt“, bei Konflikt fragt die App.
 - Offline nutzbar; Änderungen werden nachgesendet, sobald wieder Netz da ist.
