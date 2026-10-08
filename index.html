@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Finanzplaner">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Finanzplaner – Marcel &amp; Elena</title>
+<style>
+:root{
+  --bg:#0b1020; --bg2:#0e1530; --card:#141b33; --card2:#1a2342;
+  --border:rgba(148,163,184,.14); --text:#e2e8f0; --muted:#8b98b8;
+  --teal:#2dd4bf; --blue:#60a5fa; --violet:#a78bfa; --amber:#fbbf24;
+  --rose:#fb7185; --green:#4ade80;
+  --grad:linear-gradient(135deg,#2dd4bf 0%,#60a5fa 60%,#a78bfa 100%);
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#1b2a5e33,transparent),var(--bg);
+  color:var(--text);font:15px/1.5 'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh}
+header{position:sticky;top:0;z-index:10;background:rgba(11,16,32,.85);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.brand{font-size:19px;font-weight:700;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
+.brand small{display:block;font-size:11px;color:var(--muted);-webkit-text-fill-color:var(--muted);font-weight:400}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+.tab{padding:8px 16px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--muted);
+  cursor:pointer;font:inherit;font-weight:600;font-size:14px;transition:.15s}
+.tab:hover{color:var(--text);background:var(--card)}
+.tab.active{color:#04121f;background:var(--grad);box-shadow:0 4px 14px rgba(45,212,191,.25)}
+.header-actions{margin-left:auto;display:flex;gap:8px}
+.btn{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);
+  cursor:pointer;font:inherit;font-size:13px;font-weight:600;transition:.15s}
+.btn:hover{background:var(--card2);border-color:var(--teal)}
+.btn.primary{background:var(--grad);color:#04121f;border:none}
+.btn.danger:hover{border-color:var(--rose);color:var(--rose)}
+.btn.active-save{border-color:rgba(74,222,128,.5);color:var(--green)}
+.seg{display:inline-flex;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:4px}
+.seg-btn{border:none;background:transparent;padding:7px 18px}
+.seg-btn.seg-active{background:var(--grad);color:#04121f;border-radius:8px}
+.vac-card{margin-bottom:14px}
+.vac-past{opacity:.75}
+.vac-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.vac-name{font-weight:700;font-size:15px;min-width:180px}
+.vac-days{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.vac-sums{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.chip{font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(148,163,184,.1);color:var(--text);font-variant-numeric:tabular-nums}
+.chip-paid{background:rgba(74,222,128,.12);color:var(--green)}
+.chip-open{background:rgba(251,191,36,.12);color:var(--amber)}
+/* Einklappbare Blöcke */
+.block-head{cursor:pointer}
+.block-head h2{user-select:none}
+.block-head h2::after{content:"▾";font-size:11px;color:var(--muted);margin-left:9px;display:inline-block;transition:transform .15s}
+.block.collapsed .block-head h2::after{transform:rotate(-90deg)}
+.block.collapsed > .block-body{display:none}
+.chev-btn{font-size:11px;transition:transform .15s}
+.chev-btn.rot{transform:rotate(-90deg)}
+/* Drag & Drop */
+.drag-handle{cursor:grab;color:var(--muted);user-select:none;font-size:14px;letter-spacing:-1px;padding:2px 4px;display:inline-block}
+.drag-handle:active{cursor:grabbing}
+tr.dragging{opacity:.45;background:rgba(45,212,191,.08)}
+.lbl{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+main{max-width:1200px;margin:0 auto;padding:24px}
+.panel{display:none}
+.panel.visible{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+h2{font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:18px;border-radius:2px;background:var(--grad)}
+.grid{display:grid;gap:16px}
+.grid.c4{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.grid.c2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}
+.card{background:linear-gradient(160deg,var(--card),var(--bg2));border:1px solid var(--border);
+  border-radius:16px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.card h3{margin:0 0 12px;font-size:14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.kpi-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.kpi-value{font-size:26px;font-weight:700;margin:4px 0}
+.kpi-sub{font-size:12px;color:var(--muted)}
+.kpi.good .kpi-value{color:var(--green)} .kpi.bad .kpi-value{color:var(--rose)}
+.neg{color:var(--rose)!important} .pos{color:var(--green)!important}
+.warn{background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.3);color:#fda4af;
+  padding:10px 14px;border-radius:10px;margin-bottom:8px;font-size:14px}
+.ok-msg{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);color:var(--green);
+  padding:10px 14px;border-radius:10px;font-size:14px}
+.goal{margin-bottom:16px}
+.goal-head{display:flex;justify-content:space-between;font-weight:600;font-size:14px;margin-bottom:6px}
+.goal-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:var(--grad);border-radius:4px;transition:width .4s ease}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+  padding:8px 10px;border-bottom:1px solid var(--border)}
+.tbl td{padding:7px 10px;border-bottom:1px solid var(--border)}
+.tbl tbody tr:hover{background:rgba(148,163,184,.04)}
+.tbl .r{text-align:right}
+.tbl tfoot td{color:var(--muted);font-size:12.5px;padding-top:10px;border:none}
+.tbl .empty{color:var(--muted);text-align:center;padding:18px}
+.total-row td{font-weight:700;border-top:2px solid var(--border)}
+.tbl.edit input[type=text]{width:100%;min-width:110px}
+.tbl.edit input[type=number]{width:96px}
+.tbl.edit input[type=month]{width:175px}
+input,select{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);
+  padding:6px 9px;font:inherit;font-size:13.5px}
+input:focus,select:focus{outline:none;border-color:var(--teal)}
+input[type=range]{padding:0}
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=month]::-webkit-calendar-picker-indicator{filter:invert(.75);cursor:pointer;opacity:.9}
+input[type=date]:hover::-webkit-calendar-picker-indicator,
+input[type=month]:hover::-webkit-calendar-picker-indicator{opacity:1}
+input[type=date],input[type=month]{cursor:pointer}
+.btn-icon{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;border-radius:6px}
+.btn-icon:hover{color:var(--rose);background:rgba(251,113,133,.1)}
+.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+.p-m{background:rgba(96,165,250,.15);color:var(--blue)}
+.p-e{background:rgba(167,139,250,.15);color:var(--violet)}
+.p-g{background:rgba(45,212,191,.15);color:var(--teal)}
+.pill{font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.pill.ok{background:rgba(74,222,128,.12);color:var(--green)}
+.pill.bad{background:rgba(251,113,133,.12);color:var(--rose)}
+.hint{color:var(--muted);font-size:12.5px;margin-top:10px}
+.mono{font-variant-numeric:tabular-nums;color:var(--muted)}
+.cat-group{margin-bottom:18px}
+.cat-head{display:flex;justify-content:space-between;font-weight:700;font-size:14px;padding:8px 10px;
+  background:rgba(148,163,184,.06);border-radius:8px;margin-bottom:2px;cursor:default}
+.cat-head span:last-child{color:var(--teal);font-variant-numeric:tabular-nums}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin:26px 0 12px}
+.section-head h2{margin:0}
+.radio{display:inline-flex;align-items:center;gap:6px;margin-right:18px;font-size:14px;cursor:pointer}
+.slider-row{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:13px;color:var(--muted)}
+.slider-row input{flex:1}
+.chart-box{position:relative;height:300px}
+.chart-box.tall{height:340px}
+.input-row{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+.input-row label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:30px 20px}
+/* ===== Overlay / Dialoge ===== */
+.overlay{display:none;position:fixed;inset:0;z-index:100;background:rgba(5,8,18,.82);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+.overlay.open{display:flex}
+#lockScreen{z-index:200;background:#0b1020}
+.dlg{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:560px;
+  max-height:100%;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.dlg h4{margin:18px 0 8px;font-size:14px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center}
+body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* ===== Mobil ===== */
+@media (max-width:700px){
+  header{padding:10px 12px;gap:10px;backdrop-filter:none;background:#0b1020;padding-top:max(10px,env(safe-area-inset-top))}
+  .brand{font-size:17px}
+  .brand small{display:none}
+  .header-actions{margin-left:auto}
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#0b1020;border-top:1px solid var(--border);
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom));flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;gap:4px}
+  nav::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;padding:10px 14px;font-size:13.5px;white-space:nowrap}
+  main{padding:12px 10px 90px}
+  .card{padding:14px;overflow-x:auto}
+  .grid.c2{grid-template-columns:1fr}
+  .grid.c4{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi-value{font-size:20px}
+  .chart-box{height:260px}.chart-box.tall{height:300px}
+  .form-grid{grid-template-columns:1fr}
+  input,select{font-size:16px;padding:9px 10px}
+  .btn{padding:10px 14px;font-size:14px}
+  .btn-icon{padding:8px 10px;font-size:15px}
+  .tbl.edit{min-width:560px}
+  .tbl.edit input[type=text]{min-width:130px}
+  .drag-handle{display:none}
+  .vac-name{min-width:0;width:100%}
+  .section-head{flex-wrap:wrap;gap:8px}
+  .input-row{gap:10px}
+}
+@media (max-width:380px){ .grid.c4{grid-template-columns:1fr} }
+@media (display-mode:standalone){ body{overscroll-behavior-y:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Finanzplaner<small>Marcel &amp; Elena</small></div>
+  <nav>
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="budget">Budget</button>
+    <button class="tab" data-tab="urlaub">Urlaub</button>
+    <button class="tab" data-tab="zukunft">Zukunft &amp; Vorsorge</button>
+    <button class="tab" data-tab="verlauf">Verlauf</button>
+    <button class="tab" data-tab="versicherungen">Versicherungen</button>
+    <button class="tab" data-tab="notizen">Notizen</button>
+  </nav>
+  <div class="header-actions">
+    <button class="btn" id="syncBtn" data-action="sync-now" title="Cloud-Sync">☁ Sync aus</button>
+    <button class="btn" data-action="settings" title="Einstellungen, Export/Import, PIN">⚙</button>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+  </div>
+</header>
+
+<!-- PIN-Sperre -->
+<div id="lockScreen" class="overlay"><div class="dlg" style="max-width:320px;text-align:center">
+  <div class="brand" style="font-size:22px">Finanzplaner</div>
+  <p class="hint">Bitte PIN eingeben</p>
+  <input id="lockInput" type="password" inputmode="numeric" autocomplete="off" style="width:100%;text-align:center;font-size:22px;letter-spacing:6px">
+  <div id="lockErr" class="neg" style="min-height:22px;margin:6px 0"></div>
+  <button class="btn primary" id="lockBtn" style="width:100%">Entsperren</button>
+</div></div>
+
+<!-- Einstellungen -->
+<div id="settingsDlg" class="overlay"><div class="dlg">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Einstellungen</h3>
+    <button class="btn-icon" data-action="settings-close" style="font-size:18px">✕</button></div>
+
+  <h4>☁ Cloud-Sync (GitHub)</h4>
+  <p class="hint" style="margin-top:0">Daten liegen als JSON in einem <b>privaten</b> GitHub-Repo. Token: Fine-grained, nur dieses Repo, Berechtigung „Contents: Read and write“.</p>
+  <div class="form-grid">
+    <label class="lbl">GitHub-Benutzer<input id="sync_owner" type="text" autocapitalize="off" autocomplete="off"></label>
+    <label class="lbl">Daten-Repository<input id="sync_repo" type="text" autocapitalize="off" autocomplete="off" placeholder="finanzplaner-daten"></label>
+    <label class="lbl">Dateipfad<input id="sync_path" type="text" autocapitalize="off" placeholder="finanzplan-daten.json"></label>
+    <label class="lbl">Branch<input id="sync_branch" type="text" autocapitalize="off" placeholder="main"></label>
+    <label class="lbl" style="grid-column:1/-1">Token<input id="sync_token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+  </div>
+  <div class="hint" id="syncState">Nicht verbunden</div>
+  <div class="btn-row">
+    <button class="btn primary" data-action="sync-connect">Speichern &amp; verbinden</button>
+    <button class="btn" data-action="sync-now">Jetzt abgleichen</button>
+    <button class="btn danger" data-action="sync-disconnect">Trennen</button>
+  </div>
+
+  <h4>🔒 PIN-Sperre (dieses Gerät)</h4>
+  <div class="hint" id="pinState" style="margin-top:0"></div>
+  <div class="btn-row">
+    <button class="btn" data-action="pin-set">PIN setzen/ändern</button>
+    <button class="btn" data-action="lock-now">Jetzt sperren</button>
+    <button class="btn danger" data-action="pin-remove">PIN entfernen</button>
+  </div>
+
+  <h4>💾 Daten</h4>
+  <div class="btn-row">
+    <button class="btn" data-action="export">⬇ Export (JSON)</button>
+    <button class="btn" data-action="import">⬆ Import (JSON)</button>
+    <button class="btn danger" data-action="reset">Alles löschen</button>
+  </div>
+  <div id="autosaveRow" class="btn-row"><button class="btn" id="autosaveBtn" data-action="autosave">○ Autosave einrichten</button>
+    <span class="hint" style="margin:0">Nur Desktop (Chrome/Edge): zusätzlich in lokale Datei speichern</span></div>
+</div></div>
+
+<main>
+
+<!-- ================= DASHBOARD ================= -->
+<section class="panel visible" id="panel-dashboard">
+  <div class="seg" id="dashFilter" style="margin-top:6px"></div>
+  <div class="grid c4" id="kpiRow" style="margin-top:14px"></div>
+  <div id="warnBox" style="margin-top:16px"></div>
+  <div class="grid c2" style="margin-top:16px">
+    <div class="card"><h3>Budgetaufteilung (monatlich)</h3><div class="chart-box"><canvas id="chartBudgetDonut"></canvas></div></div>
+    <div class="card"><h3>Fixkosten nach Kategorie</h3><div class="chart-box"><canvas id="chartCatBar"></canvas></div></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Sparziele im Überblick</h3><div id="goalBars"></div></div>
+</section>
+
+<!-- ================= BUDGET ================= -->
+<section class="panel" id="panel-budget">
+  <div class="block" data-block="b-summary">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-summary"><h2>Monatsübersicht</h2></div>
+    <div class="block-body"><div class="card" id="budgetSummary"></div></div>
+  </div>
+
+  <div class="block" data-block="b-split">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-split"><h2>Aufteilung gemeinsamer Fixkosten</h2></div>
+    <div class="block-body"><div class="card" id="splitBox"></div></div>
+  </div>
+
+  <div class="block" data-block="b-income">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-income"><h2>Einkommen</h2><button class="btn" data-action="add-income">+ Einnahme</button></div>
+    <div class="block-body"><div class="card" id="incomeTable"></div></div>
+  </div>
+
+  <div class="block" data-block="b-extras">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-extras"><h2>Zusatzeinnahmen (unregelmäßig)</h2><button class="btn" data-action="add-extra">+ Buchung</button></div>
+    <div class="block-body"><div class="card" id="extrasTable"></div></div>
+  </div>
+
+  <div class="block" data-block="b-costs">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-costs"><h2>Fixkosten <span class="hint" id="costSum" style="font-weight:400"></span></h2><button class="btn" data-action="add-cost">+ Fixkosten-Position</button></div>
+    <div class="block-body"><div class="card" id="costGroups"></div></div>
+  </div>
+
+  <div class="block" data-block="b-savings">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-savings"><h2>Sparraten</h2><button class="btn" data-action="add-saving">+ Sparrate</button></div>
+    <div class="block-body"><div class="card" id="savingsTable"></div></div>
+  </div>
+
+  <div class="block" data-block="b-konsum">
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-konsum"><h2>Konsum-Budgets</h2><button class="btn" data-action="add-konsum">+ Budget</button></div>
+    <div class="block-body"><div class="card" id="konsumTable"></div></div>
+  </div>
+</section>
+
+<!-- ================= URLAUB ================= -->
+<section class="panel" id="panel-urlaub">
+  <h2>Urlaubsbudget</h2>
+  <div class="grid c4">
+    <div class="card kpi">
+      <div class="kpi-label">Urlaubstopf aktuell</div>
+      <div class="kpi-value" style="display:flex;align-items:baseline;gap:6px"><input type="number" step="0.01" id="urlaubBalance" style="width:150px;font-size:26px;font-weight:700;padding:2px 8px"> €</div>
+      <div class="kpi-sub">monatlich aktualisieren</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label">Aktuelle Sparrate „Urlaub“</div>
+      <div class="kpi-value" id="urlaubRate"></div>
+      <div class="kpi-sub">aus den Sparraten im Budget-Tab</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label">Offene Restkosten</div>
+      <div class="kpi-value" id="urlaubOpen" style="color:var(--amber)"></div>
+      <div class="kpi-sub">aller geplanten Urlaube (nach Basis)</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label">Nötige Sparrate</div>
+      <div class="kpi-value" id="urlaubRequired"></div>
+      <div class="kpi-sub">damit alle Urlaube erreichbar sind</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label">Geplante Sondereinnahmen</div>
+      <div class="kpi-value" id="urlaubDeposits" style="color:var(--teal)"></div>
+      <div class="kpi-sub">fließen in die Prognose ein</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label" id="urlaubForecastLabel">Prognose Urlaubstopf</div>
+      <div class="kpi-value" id="urlaubForecast"></div>
+      <div class="kpi-sub" id="urlaubForecastSub"></div>
+    </div>
+  </div>
+
+  <div class="block" data-block="u-basis">
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-basis"><h2>Kalkulationsbasis</h2></div>
+    <div class="block-body"><div class="card" id="basisBox"></div></div>
+  </div>
+
+  <div class="block" data-block="u-planned">
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-planned"><h2>Geplante Urlaube</h2><button class="btn primary" data-action="add-vac">+ Urlaub planen</button></div>
+    <div class="block-body" id="vacListPlanned"></div>
+  </div>
+
+  <div class="block" data-block="u-chart" id="vacChartCard">
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-chart"><h2>Prognose Urlaubstopf</h2></div>
+    <div class="block-body"><div class="card"><div class="chart-box"><canvas id="chartVacation"></canvas></div></div></div>
+  </div>
+
+  <div class="block" data-block="u-deps">
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-deps"><h2>Sondereinnahmen für den Urlaubstopf</h2><button class="btn" data-action="add-vacdep">+ Sondereinnahme</button></div>
+    <div class="block-body"><div class="card" id="vacDepTable"></div></div>
+  </div>
+
+  <div class="block" data-block="u-past" id="pastBlock">
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-past"><h2>Abgeschlossene Urlaube (Archiv)</h2></div>
+    <div class="block-body" id="vacListPast"></div>
+  </div>
+
+  <div class="block" data-block="u-analysis" id="vacAnalysisWrap">
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-analysis"><h2>Auswertung</h2></div>
+    <div class="block-body">
+      <div class="grid c4" id="vacStats"></div>
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
+          <button class="btn-icon" data-action="vac-slide" data-dir="-1" title="Vorherige Auswertung" style="font-size:20px">‹</button>
+          <h3 id="vacSlideTitle" style="margin:0;text-align:center;flex:1"></h3>
+          <button class="btn-icon" data-action="vac-slide" data-dir="1" title="Nächste Auswertung" style="font-size:20px">›</button>
+        </div>
+        <div class="chart-box tall"><canvas id="chartVacSlide"></canvas></div>
+        <div id="vacSlideDots" style="display:flex;justify-content:center;gap:8px;margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ZIELE ================= -->
+<section class="panel" id="panel-ziele">
+  <div class="block" data-block="z-home">
+  <div class="section-head block-head" data-action="toggle-block" data-key="z-home"><h2>Sparziel Eigenheim</h2></div>
+  <div class="block-body">
+  <div class="card">
+    <div class="input-row">
+      <label>Zielbetrag (€)<input type="number" step="100" id="homeTarget"></label>
+      <label>Aktueller Stand (aus Vermögensprognose)<div class="kpi-value" id="homeCurrent" style="font-size:18px"></div></label>
+      <label>Zinssatz p.&#8202;a. (%)<input type="number" step="0.1" id="homeZins" style="width:90px"></label>
+      <label>Sparrate (aus Budget)<div class="kpi-value" id="homeRate" style="font-size:18px"></div></label>
+      <label>Zielerreichung<div class="kpi-value" id="homeForecast" style="font-size:18px"></div></label>
+    </div>
+    <div class="bar" style="margin-top:16px"><div class="bar-fill" id="homeBar"></div></div>
+    <div class="goal-sub" id="homePct"></div>
+  </div>
+  <div class="section-head" style="margin-top:16px"><h2>Sparraten-Staffel (Heute vs. Prognose)</h2><button class="btn" data-action="add-homerate">+ Ratenänderung</button></div>
+  <div class="card" id="homeRateTable"></div>
+  <div class="card" id="homeChartCard" style="margin-top:16px">
+    <h3>Prognose Eigenheim-Sparen</h3>
+    <div class="chart-box"><canvas id="chartHome"></canvas></div>
+  </div>
+  </div><!-- /block-body z-home -->
+  </div><!-- /block z-home -->
+
+  <div class="block" data-block="z-retire">
+  <div class="section-head block-head" data-action="toggle-block" data-key="z-retire"><h2>Altersvorsorge – Zinseszins-Rechner</h2></div>
+  <div class="block-body">
+  <div class="card">
+    <div class="input-row">
+      <label>Anlagehorizont (Jahre)<input type="number" step="1" min="1" id="retYears" style="width:90px"></label>
+      <label>Zinssatz p.&#8202;a. (%)<input type="number" step="0.1" id="retZins" style="width:90px"></label>
+      <label>Inflation p.&#8202;a. (%)<input type="number" step="0.1" id="retInfl" style="width:90px"></label>
+      <label>Gesamt aktuell (aus Vermögensprognose)<div class="kpi-value" id="retCurrent" style="font-size:18px"></div></label>
+      <label>Monatl. Einzahlung gesamt (aus Budget)<div class="kpi-value" id="retRate" style="font-size:18px"></div></label>
+    </div>
+  </div>
+  <div class="grid c2" style="margin-top:16px" id="retPersons"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Hochrechnung Altersvorsorge</h3>
+    <div class="chart-box tall"><canvas id="chartRet"></canvas></div>
+  </div>
+  </div><!-- /block-body z-retire -->
+  </div><!-- /block z-retire -->
+</section>
+
+<!-- ================= ZUKUNFT ================= -->
+<section class="panel" id="panel-zukunft">
+  <div class="section-head">
+    <h2>Zukunftsplanung</h2>
+    <div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap">
+      <label class="lbl">Stichtag<input type="month" id="zuTarget"></label>
+      <label class="lbl">Wachstum bis Stichtag (%)<input type="number" step="0.1" id="zuGrowth" style="width:80px"></label>
+      <span class="hint" id="zuMonths" style="margin:0 0 8px"></span>
+    </div>
+  </div>
+
+  <div class="block" data-block="zu-assets">
+    <div class="section-head block-head" data-action="toggle-block" data-key="zu-assets"><h2>Vermögensprognose bis Stichtag</h2><button class="btn" data-action="add-zasset">+ Vermögenswert</button></div>
+    <div class="block-body">
+      <div class="card" id="zAssetTable"></div>
+      <div class="card" style="margin-top:16px"><h3>Heute vs. Prognose</h3><div class="chart-box"><canvas id="chartZAssets"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="block" data-block="zu-budget">
+    <div class="section-head block-head" data-action="toggle-block" data-key="zu-budget"><h2>Budgetplanung ab Stichtag</h2><button class="btn" data-action="add-zbudget">+ Baustein</button></div>
+    <div class="block-body">
+      <div class="card" id="zBudgetTable"></div>
+    </div>
+  </div>
+
+  <div class="block" data-block="zu-fix">
+    <div class="section-head block-head" data-action="toggle-block" data-key="zu-fix"><h2>Fixkosten ab Stichtag (Detail)</h2>
+      <div style="display:flex;gap:12px;align-items:center">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">Inflationsfaktor (%)
+          <input type="number" step="0.1" id="zfixInfl" style="width:70px"></label>
+        <button class="btn" data-action="add-zfix">+ Position</button>
+      </div>
+    </div>
+    <div class="block-body">
+      <div class="grid c2">
+        <div class="card" id="zFixTable"></div>
+        <div class="card"><h3>Fixkosten-Verteilung</h3><div class="chart-box"><canvas id="chartZFix"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block" data-block="zu-haus">
+    <div class="section-head block-head" data-action="toggle-block" data-key="zu-haus"><h2>Hauskauf-Simulation</h2></div>
+    <div class="block-body"><div class="card">
+      <div class="input-row">
+        <label>Monatliche Rate (€)<input type="number" step="10" id="hausRate"></label>
+        <label>Sollzins p.&#8202;a. (%)<input type="number" step="0.1" id="hausZins" style="width:90px"></label>
+        <label>Laufzeit (Jahre)<input type="number" step="1" min="1" id="hausJahre" style="width:90px"></label>
+        <label>Eigenkapital (€)<input type="number" step="100" id="hausEK"></label>
+        <label>Kaufnebenkosten (%)<input type="number" step="0.1" id="hausNK" style="width:90px"></label>
+      </div>
+      <div class="grid c4" style="margin-top:18px" id="hausResults"></div>
+      <div class="hint">Faustformel für die Rate: künftiges Restbudget + heutige Eigenheim-Sparrate. Als Eigenkapital bietet sich die Eigenheim-Prognose aus der Vermögensübersicht an.</div>
+    </div></div>
+  </div>
+
+</section>
+
+<!-- ================= VERLAUF ================= -->
+<section class="panel" id="panel-verlauf">
+  <div class="section-head">
+    <h2>Sparfortschritt über die Zeit</h2>
+    <button class="btn primary" data-action="snapshot">📌 Snapshot für diesen Monat speichern</button>
+  </div>
+  <div class="hint" style="margin-bottom:12px">Einmal im Monat klicken: Es werden die aktuellen Stände (Urlaubstopf, Eigenheim, Altersvorsorge) sowie Fixkosten und Sparraten festgehalten. Werte lassen sich in der Tabelle nachträglich korrigieren.</div>
+  <div class="card" id="snapTable"></div>
+  <div class="block" data-block="v-chart" id="snapChartCard">
+    <div class="section-head block-head" data-action="toggle-block" data-key="v-chart"><h2>Verlauf</h2></div>
+    <div class="block-body">
+      <div class="card"><h3>Töpfe: Eigenheim &amp; Altersvorsorge</h3><div class="chart-box tall"><canvas id="chartSnaps"></canvas></div></div>
+      <div class="card" style="margin-top:16px"><h3>Entwicklung Fixkosten &amp; Sparraten</h3><div class="chart-box"><canvas id="chartSnapsBudget"></canvas></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VERSICHERUNGEN ================= -->
+<section class="panel" id="panel-versicherungen">
+  <div class="section-head"><h2>Versicherungscheck</h2><button class="btn primary" data-action="add-vers">+ Versicherung</button></div>
+  <div class="hint" style="margin-bottom:12px">Alle Policen erfassen – der Check unten bewertet die Abdeckung nach den Empfehlungen von Verbraucherzentrale, Finanztip und Stiftung Warentest. Die Beiträge hier dienen der Übersicht; im Budget ggf. zusätzlich als Fixkosten pflegen.</div>
+  <div class="grid c4" id="versKpis" style="margin-bottom:16px"></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="input-row">
+      <label>Wohnfläche in m² (für den Hausrat-Check)<input type="number" step="1" min="0" id="versWohnflaeche" style="width:90px"></label>
+      <label class="radio" style="align-self:end"><input type="checkbox" id="versEigentum" data-action="vers-flag" data-flag="eigentum"> Wohneigentum vorhanden</label>
+      <label class="radio" style="align-self:end"><input type="checkbox" id="versAuto" data-action="vers-flag" data-flag="auto"> Auto vorhanden</label>
+    </div>
+  </div>
+  <div class="card" id="versTable" style="margin-bottom:16px"></div>
+  <div class="block" data-block="vers-check">
+    <div class="section-head block-head" data-action="toggle-block" data-key="vers-check"><h2>Bewertung der Abdeckung</h2></div>
+    <div class="block-body" id="versCheckList"></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Faustregeln (Quellen: Verbraucherzentrale, Finanztip, Stiftung Warentest)</h3>
+    <div class="hint" style="margin:8px 0 0;line-height:1.7">
+      <b>Privathaftpflicht:</b> unverzichtbar, mind. 10 Mio. € Deckung (ideal 50 Mio.), Paartarif reicht, Forderungsausfalldeckung mitnehmen · ca. 20–50 €/Jahr.<br>
+      <b>Berufsunfähigkeit:</b> je Person, BU-Rente 70–80 % vom Netto, Laufzeit bis 67.<br>
+      <b>Auslandsreisekranken:</b> Jahresvertrag ab unter 10–20 €/Jahr – GKV zahlt im Ausland kaum, Rücktransport nie.<br>
+      <b>Hausrat:</b> Faustregel 650 €/m² Wohnfläche als Versicherungssumme (Unterversicherungsverzicht).<br>
+      <b>Risikoleben:</b> ab Immobilienkredit/Familie – mind. Darlehenshöhe bzw. 3–4 Bruttojahresgehälter (kinderloses Paar 3–4, mit Kindern 5).<br>
+      <b>Wohngebäude + Elementar:</b> ab Eigentum Pflichtprogramm; Elementarbaustein (Hochwasser, Starkregen, Rückstau) immer mit abschließen.<br>
+      <b>Meist überflüssig:</b> Handy-, Reisegepäck-, Sterbegeld-, Krankenhaustagegeld- und Glasbruchversicherung.
+    </div>
+  </div>
+</section>
+
+<!-- ================= NOTIZEN ================= -->
+<section class="panel" id="panel-notizen">
+  <div class="section-head"><h2>Notizen</h2></div>
+  <div class="hint" style="margin-bottom:12px">Freies Notizblatt – wird automatisch mitgespeichert (lokal, wie alle anderen Daten).</div>
+  <div class="card"><textarea id="notesArea" placeholder="Hier Notizen, Ideen und offene Punkte festhalten …" style="width:100%;min-height:420px;resize:vertical;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font:inherit;line-height:1.5"></textarea></div>
+</section>
+
+</main>
+
+<footer>Daten werden lokal im Browser gespeichert und – falls eingerichtet – verschlüsselt übertragen in dein privates GitHub-Repo. Keine Tracker, kein Fremdserver.</footer>
+
+<script src="chart.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
