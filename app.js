@@ -350,10 +350,12 @@ const pctLabelsPlugin = {
     chart.getDatasetMeta(0).data.forEach((arc, i) => {
       const val = ds.data[i] || 0;
       if (val / total < 0.03) return; // sehr kleine Segmente nicht beschriften
+      const arcLen = (arc.endAngle - arc.startAngle) * ((arc.innerRadius + arc.outerRadius) / 2);
+      if (arcLen < 30) return;       // zu schmal für die Beschriftung → keine Überlappung
       const p = arc.getCenterPoint ? arc.getCenterPoint() : arc.tooltipPosition();
       ctx.save();
       ctx.fillStyle = "#0f172a";
-      ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(Math.round(val / total * 100) + " %", p.x, p.y);
       ctx.restore();
@@ -399,35 +401,36 @@ function renderDashboard() {
     `<button class="btn seg-btn ${f === p ? "seg-active" : ""}" data-action="dash-filter" data-person="${p}">${p}</button>`).join("");
 
   document.getElementById("heroCard").innerHTML =
-    `<div class="card hero ${rest < 0 ? "bad" : "good"}"><div class="kpi-label">Frei verfügbar / Monat</div>
+    `<div class="card hero ${rest < 0 ? "bad" : "good"}" data-goto="budget:b-summary"><div class="kpi-label">Frei verfügbar / Monat</div>
      <div class="hero-val">${eur(rest)}</div><div class="kpi-sub">nach Fixkosten, Sparen &amp; Konsum-Budget</div></div>`;
   const kpis = [
-    { label: "Einnahmen", val: eur0(ti), sub: isAll ? "M " + eur0(incomeOf("Marcel")) + " · E " + eur0(incomeOf("Elena")) : "nur " + f },
-    { label: "Fixkosten", val: eur0(fix), sub: ti > 0 ? fmtPct.format(fix / ti) + " der Einn." : "" },
-    { label: "Sparrate", val: eur0(sp), sub: "Quote " + fmtPct.format(q) }
+    { goto: "budget:b-income", label: "Einnahmen", val: eur0(ti), sub: isAll ? "M " + eur0(incomeOf("Marcel")) + " · E " + eur0(incomeOf("Elena")) : "nur " + f },
+    { goto: "budget:b-costs", label: "Fixkosten", val: eur0(fix), sub: ti > 0 ? fmtPct.format(fix / ti) + " der Einn." : "" },
+    { goto: "budget:b-savings", label: "Sparrate", val: eur0(sp), sub: "Quote " + fmtPct.format(q) }
   ];
   document.getElementById("kpiRow").innerHTML = kpis.map(k =>
-    `<div class="card kpi"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join("");
+    `<div class="card kpi" data-goto="${k.goto}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join("");
 
   // Warnungen (als eine Zeile, aufklappbar)
   const warns = [];
-  if (rest < 0) warns.push("Das Gesamtbudget ist negativ (" + eur(rest) + ") – Ausgaben oder Sparraten prüfen.");
-  PERSONEN.forEach(p => { if (restOf(p) < 0) warns.push("Puffer von " + p + " ist negativ (" + eur(restOf(p)) + ")."); });
-  vp.vacs.filter(v => !v.ok).forEach(v => warns.push("Urlaub „" + v.name + "“ ist mit aktueller Sparrate nicht erreichbar."));
-  if (hp.target > 0 && hp.rate <= 0) warns.push("Für das Eigenheim-Ziel ist keine Sparrate hinterlegt.");
+  const wl = (txt, goto) => warns.push({ txt, goto });
+  if (rest < 0) wl("Das Gesamtbudget ist negativ (" + eur(rest) + ") – Ausgaben oder Sparraten prüfen.", "budget:b-summary");
+  PERSONEN.forEach(p => { if (restOf(p) < 0) wl("Puffer von " + p + " ist negativ (" + eur(restOf(p)) + ").", "budget:b-summary"); });
+  vp.vacs.filter(v => !v.ok).forEach(v => wl("Urlaub „" + v.name + "“ ist mit aktueller Sparrate nicht erreichbar.", "urlaub:u-planned"));
+  if (hp.target > 0 && hp.rate <= 0) wl("Für das Eigenheim-Ziel ist keine Sparrate hinterlegt.", "budget:b-savings");
   document.getElementById("warnBox").innerHTML = warns.length
-    ? `<details class="warn"><summary>⚠ ${warns.length} Hinweis${warns.length > 1 ? "e" : ""}</summary>${warns.map(w => `<div>${esc(w)}</div>`).join("")}</details>`
+    ? `<details class="warn"><summary>⚠ ${warns.length} Hinweis${warns.length > 1 ? "e" : ""}</summary>${warns.map(w => `<div class="wl" data-goto="${w.goto}">${esc(w.txt)}</div>`).join("")}</details>`
     : `<div class="ok-msg">✓ Alles im grünen Bereich</div>`;
 
   // Sparziel-Fortschritt
   const goals = [];
   const upcoming = vp.openTotal;
-  if (upcoming > 0 || state.urlaub.balance > 0) goals.push({ name: "Urlaubstopf", cur: state.urlaub.balance, target: upcoming || null, extra: (vp.rate > 0 ? "+" + eur0(vp.rate) + "/Monat · " : "") + "offene Urlaubs-Restkosten " + eur0(upcoming) });
-  if (hp.target > 0) goals.push({ name: "Eigenheim", cur: hp.current, target: hp.target, extra: hp.months != null ? "Ziel ca. " + ymLabel(hp.doneYM) : "" });
-  goals.push({ name: "Altersvorsorge", cur: assetSumFor("altersvorsorge"), target: null, extra: "+" + eur0(rs.rate) + "/Monat · Prognose " + eur0(rs.endNominal) + " in " + state.alters.years + " J." });
+  if (upcoming > 0 || state.urlaub.balance > 0) goals.push({ goto: "urlaub:u-planned", name: "Urlaubstopf", cur: state.urlaub.balance, target: upcoming || null, extra: (vp.rate > 0 ? "+" + eur0(vp.rate) + "/Monat · " : "") + "offene Urlaubs-Restkosten " + eur0(upcoming) });
+  if (hp.target > 0) goals.push({ goto: "zukunft:z-home", name: "Eigenheim", cur: hp.current, target: hp.target, extra: hp.months != null ? "Ziel ca. " + ymLabel(hp.doneYM) : "" });
+  goals.push({ goto: "zukunft:z-retire", name: "Altersvorsorge", cur: assetSumFor("altersvorsorge"), target: null, extra: "+" + eur0(rs.rate) + "/Monat · Prognose " + eur0(rs.endNominal) + " in " + state.alters.years + " J." });
   document.getElementById("goalBars").innerHTML = goals.map(g => {
     const pct = g.target ? Math.min(100, g.cur / g.target * 100) : null;
-    return `<div class="goal"><div class="goal-head"><span>${esc(g.name)}</span><span>${eur0(g.cur)}${g.target ? " / " + eur0(g.target) : ""}</span></div>
+    return `<div class="goal" data-goto="${g.goto}"><div class="goal-head"><span>${esc(g.name)}</span><span>${eur0(g.cur)}${g.target ? " / " + eur0(g.target) : ""}</span></div>
       ${pct != null ? `<div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>` : ""}
       <div class="goal-sub">${esc(g.extra)}</div></div>`;
   }).join("");
@@ -442,7 +445,7 @@ function renderDashboard() {
       datasets: [{ data: [fix, spAV, spEH, spRest, ko, Math.abs(rest)], backgroundColor: [C.blue, C.violet, C.teal, "#38bdf8", C.amber, rest >= 0 ? C.green : C.rose], borderWidth: 0 }]
     },
     plugins: [pctLabelsPlugin],
-    options: { plugins: { legend: { position: "bottom", labels: { color: C.text } }, tooltip: { callbacks: { label: ctx => ctx.label + ": " + eur(ctx.parsed) } } }, cutout: "62%" }
+    options: { layout: { padding: 4 }, plugins: { legend: { position: "bottom", labels: { color: C.text, boxWidth: 10, font: { size: 11 }, padding: 8 } }, tooltip: { callbacks: { label: ctx => ctx.label + ": " + eur(ctx.parsed) } } }, cutout: "58%" }
   });
 
   // Balken: Fixkosten nach Kategorie (bei Personenfilter: persönliche + Anteil gemeinsam)
@@ -459,7 +462,9 @@ function renderDashboard() {
   makeChart("chartCatBar", {
     type: "bar",
     data: { labels: cats, datasets: [{ label: "€/Monat", data: cats.map(c => byCat[c]), backgroundColor: cats.map((_, i) => PALETTE[i % PALETTE.length]), borderRadius: 6 }] },
-    options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => eur(ctx.parsed.x) } } }, scales: { x: { grid: { color: C.grid }, ticks: { color: C.text, callback: v => eur0(v) } }, y: { grid: { display: false }, ticks: { color: C.text } } } }
+    options: { indexAxis: "y", onClick: (evt, els) => { if (els.length && window.matchMedia("(min-width:701px)").matches) goTo("budget:b-costs:" + cats[els[0].index]); },
+      onHover: (evt, els) => { evt.native.target.style.cursor = els.length && window.matchMedia("(min-width:701px)").matches ? "pointer" : "default"; },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => eur(ctx.parsed.x) } } }, scales: { x: { grid: { color: C.grid }, ticks: { color: C.text, maxTicksLimit: 4, font: { size: 11 }, callback: v => eur0(v) } }, y: { grid: { display: false }, ticks: { color: C.text, autoSkip: false, font: { size: 11 } } } } }
   });
 }
 
@@ -475,12 +480,13 @@ function renderBudget() {
     ["Konsum-Budget", totalKonsum(), konsumOf("Marcel"), konsumOf("Elena")],
     ["Puffer (Rest)", restTotal(), restOf("Marcel"), restOf("Elena")]
   ];
+  const rowGoto = ["budget:b-income", "budget:b-costs", "budget:b-savings", "budget:b-konsum", ""];
   document.getElementById("budgetSummary").innerHTML = `
     <table class="tbl"><thead><tr><th>Monatlicher Plan</th><th class="r">Gesamt</th><th class="r">Marcel</th><th class="r">Elena</th></tr></thead><tbody>
-    ${rows.map((r, i) => `<tr class="${i === 4 ? "total-row" : ""}"><td>${r[0]}</td>${r.slice(1).map(v =>
+    ${rows.map((r, i) => `<tr class="${i === 4 ? "total-row" : ""}" ${rowGoto[i] ? `data-goto="${rowGoto[i]}"` : ""}><td>${r[0]}</td>${r.slice(1).map(v =>
       `<td class="r ${i === 4 ? (v < 0 ? "neg" : "pos") : ""}">${eur(v)}</td>`).join("")}</tr>`).join("")}
     </tbody></table>
-    <div class="hint">Gemeinsame Fixkosten (${eur(sharedCosts())}) aufgeteilt: Marcel ${fmtPct.format(shareOf("Marcel"))} · Elena ${fmtPct.format(shareOf("Elena"))}</div>`;
+    <div class="hint">Gemeinsame Fixkosten (${eur(sharedCosts())}) aufgeteilt: Marcel ${fmtPct.format(shareOf("Marcel"))} · Elena ${fmtPct.format(shareOf("Elena"))}${state.settings.splitMode === "einkommen" ? ` · <a class="inl" data-goto="budget:b-income">nach Einkommen ›</a>` : ""}</div>`;
 
   // Split-Einstellung
   const s = state.settings;
@@ -1019,7 +1025,7 @@ function renderZukunft() {
     brows.map(({ it, val, run }) => [
       inp("text", it.id, "zbudget", "name", it.name),
       it.link === "fixkosten"
-        ? `<span class="mono neg" title="Automatisch: Fixkosten aus dem Budget-Tab inkl. Inflationsfaktor">${eur(val)} 🔗</span>`
+        ? `<span class="mono neg" data-goto="budget:b-costs" title="Automatisch: Fixkosten aus dem Budget-Tab inkl. Inflationsfaktor">${eur(val)} 🔗</span>`
         : inp("number", it.id, "zbudget", "amount", it.amount),
       `<span class="mono">${val < 0 && gross > 0 ? fmtPct.format(-val / gross) : ""}</span>`,
       `<span class="mono ${run < 0 ? "neg" : ""}">${eur(run)}</span>`,
@@ -1641,14 +1647,47 @@ const ACCORDION = { budget: "b-summary", urlaub: "u-planned" };   // Panel -> St
 const DEFAULT_CLOSED = ["d-charts", "v-chart", "vers-rules"];
 let zSeg = "vermoegen";
 
-function gotoTab(tab) {
+function gotoTab(tab, push = true) {
   closeSheet();
+  if (push && tab !== currentTab) { try { history.pushState({ tab }, ""); } catch (e) { /* ignorieren */ } }
   currentTab = tab;
   const group = MEHR_TABS.includes(tab) ? "mehr" : tab;
   document.querySelectorAll("nav .tab").forEach(x => x.classList.toggle("active", x.dataset.tab === group));
   render();
   window.scrollTo(0, 0);
 }
+
+/* ---------- Verlinkungen: data-goto="tab:block[:kategorie]" ---------- */
+const BLOCK_SEG = { "zu-assets": "vermoegen", "z-home": "eigenheim", "zu-haus": "eigenheim", "z-retire": "vorsorge", "zu-budget": "budget" };
+function goTo(spec) {
+  const [tab, block, extra] = String(spec).split(":");
+  if (BLOCK_SEG[block]) zSeg = BLOCK_SEG[block];
+  gotoTab(tab);
+  const b = block ? document.querySelector(`#panel-${tab} .block[data-block="${block}"]`) : null;
+  if (!b) return;
+  setBlockOpen(b, true);
+  if (extra) openCats.add(extra);
+  render();
+  setTimeout(() => {
+    b.scrollIntoView({ behavior: "smooth", block: "start" });
+    b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash");
+    setTimeout(() => b.classList.remove("flash"), 1800);
+  }, 60);
+}
+/* Werte, die aus anderen Bereichen stammen, verlinken */
+const VALUE_LINKS = {
+  urlaubRate: "budget:b-savings", urlaubOpen: "budget:b-savings", urlaubRequired: "budget:b-savings",
+  urlaubDeposits: "urlaub:u-deps", urlaubForecast: "urlaub:u-chart",
+  homeRate: "budget:b-savings", retRate: "budget:b-savings",
+  homeCurrent: "zukunft:zu-assets", retCurrent: "zukunft:zu-assets"
+};
+Object.entries(VALUE_LINKS).forEach(([id, goto]) => {
+  const el = document.getElementById(id);
+  const host = el && (el.closest("label") || el.closest(".card.kpi") || el.closest(".card"));
+  if (host) host.dataset.goto = goto;
+});
+window.addEventListener("popstate", e => { if (e.state && e.state.tab) gotoTab(e.state.tab, false); });
+try { history.replaceState({ tab: currentTab }, ""); } catch (e) { /* ignorieren */ }
 
 /* ---------- Blöcke ---------- */
 function panelOf(b) { const p = b.closest(".panel"); return p ? p.id.slice(6) : ""; }
@@ -1797,6 +1836,12 @@ function openRowSheet(tr, ths, title) {
     cloneControl(ctl, lab);
     body.appendChild(lab);
   });
+  const lk = tr.querySelector("[data-goto]");
+  if (lk) {
+    const g = document.createElement("button");
+    g.className = "btn sheet-del"; g.textContent = "Zu den Fixkosten im Budget ›"; g.dataset.goto = lk.dataset.goto;
+    body.appendChild(g);
+  }
   const del = tr.querySelector("button[data-action^='del']");
   if (del) {
     const b = document.createElement("button");
@@ -1826,6 +1871,8 @@ function openFab() {
 }
 
 document.addEventListener("click", e => {
+  const gt = e.target.closest("[data-goto]");
+  if (gt && !e.target.closest("input,select,.lrow")) { goTo(gt.dataset.goto); return; }
   const lr = e.target.closest(".lrow");
   if (lr && lr._tr) { openRowSheet(lr._tr, lr._ths, lr._title); return; }
   const t = e.target.closest("[data-action],[data-fab]");

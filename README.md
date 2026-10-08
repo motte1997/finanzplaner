@@ -42,6 +42,8 @@ Danach PIN setzen (⚙ → PIN-Sperre).
 - Urlaub: ein geplanter Betrag je Position (statt Min/Max). Bestehende Min/Max-Werte werden beim ersten Laden gemittelt.
 - Budgetplanung (Zukunft) nutzt die aktuellen Fixkosten aus dem Budget-Tab × Inflationsfaktor (eigene Fixkostenliste entfällt).
 
+- Verlinkungen: Kennzahlen, Sparziele, Hinweise und aus anderen Bereichen stammende Werte (mit „›“) springen direkt zum passenden Block. Die Zurück-Taste führt zurück.
+
 ## Verhalten
 - Änderungen werden ~2 s nach der Eingabe in die Cloud geschrieben; beim Öffnen/Zurückkehren wird der Cloud-Stand geholt. „Neuester Stand gewinnt“, bei Konflikt fragt die App.
 - Offline nutzbar; Änderungen werden nachgesendet, sobald wieder Netz da ist.

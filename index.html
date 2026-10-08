@@ -223,6 +223,23 @@ body.sheet-open{overflow:hidden}
   background:var(--grad);color:#04121f;font-size:30px;line-height:1;cursor:pointer;box-shadow:0 8px 24px rgba(45,212,191,.35)}
 .seg{display:flex;width:100%}
 .seg-btn{flex:1;min-width:0;padding:9px 2px;font-size:13px;white-space:nowrap}
+/* Verlinkungen */
+[data-goto]{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.card[data-goto]{position:relative;transition:border-color .15s}
+.card[data-goto]:hover{border-color:rgba(45,212,191,.45)}
+.card[data-goto]::after{content:"›";position:absolute;right:12px;top:8px;font-size:20px;line-height:1;color:var(--muted)}
+.grid.c3 .card[data-goto]::after{right:9px;top:7px;font-size:17px}
+label[data-goto] .kpi-value{border-bottom:1px dashed var(--muted);display:inline-block}
+label[data-goto]{cursor:pointer}
+.goal[data-goto] .goal-head span:first-child::after{content:" ›";color:var(--muted)}
+details.warn .wl{padding:8px 0;border-top:1px solid rgba(251,113,133,.2);margin-top:8px}
+details.warn .wl::after{content:" ›";opacity:.7}
+.tbl tr[data-goto]:hover{background:rgba(45,212,191,.06)}
+.tbl tr[data-goto] td:first-child::after{content:" ›";color:var(--muted)}
+.inl{color:var(--teal);text-decoration:underline;cursor:pointer}
+.block{scroll-margin-top:84px}
+@keyframes flash{0%{box-shadow:0 0 0 2px var(--teal),0 0 24px rgba(45,212,191,.35)}100%{box-shadow:0 0 0 2px transparent,0 0 0 transparent}}
+.block.flash{animation:flash 1.8s ease-out}
 /* ===== Overlay / Dialoge ===== */
 .overlay{display:none;position:fixed;inset:0;z-index:100;background:rgba(5,8,18,.82);backdrop-filter:blur(6px);
   align-items:center;justify-content:center;padding:16px;overflow-y:auto}
