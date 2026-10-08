@@ -1,5 +1,5 @@
 /* Service Worker: App-Shell offline verfügbar. Die GitHub-API wird NIE gecacht. */
-const CACHE = "finanzplaner-shell-v2";   // bei App-Updates hochzählen (v2, v3, …)
+const CACHE = "finanzplaner-shell-v3";   // bei App-Updates hochzählen (v2, v3, …)
 const SHELL = ["./", "./index.html", "./app.js", "./chart.min.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 

@@ -148,19 +148,32 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:30px 20px}
 details.warn summary{cursor:pointer;font-weight:600;list-style:none}
 details.warn summary::-webkit-details-marker{display:none}
 details.warn div{margin-top:6px;font-size:13.5px}
-/* Blöcke als Akkordeon-Karten */
-.block{margin-top:10px}
-.section-head.block-head{margin:0;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;gap:10px}
-.block-head h2{margin:0;font-size:16px;flex:1}
-.block-head h2::before{display:none}
-.block-head .btn{padding:7px 12px;font-size:13px;white-space:nowrap}
-.block:not(.collapsed) > .block-head{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
-.block-body{padding-top:10px}
-#panel-zukunft .block-head h2::after{display:none}
+/* Blöcke als einheitliche Akkordeon-Karten (Kopf + Inhalt = eine Karte) */
+.block{margin-top:12px;background:linear-gradient(160deg,var(--card),var(--bg2));border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.section-head.block-head{margin:0;background:none;border:none;border-radius:0;padding:0 16px;min-height:58px;gap:10px;align-items:center;justify-content:flex-start}
+.block-head h2{margin:0;font-size:16px;flex:1;display:block;min-width:0;line-height:1.3}
+.block-head h2::before,.block-head h2::after,.block.collapsed .block-head h2::after{display:none!important}
+.block-head h2 .hint{display:block;font-size:12px;margin:2px 0 0;font-weight:400}
+.block-head .btn{height:36px;padding:0 14px;font-size:13px;white-space:nowrap;flex:0 0 auto;display:inline-flex;align-items:center}
+.block-head::after{content:"";flex:0 0 auto;width:8px;height:8px;margin:0 4px 0 2px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s}
+.block.collapsed > .block-head::after{transform:rotate(-45deg)}
+.block-body{padding:0 16px 16px}
+.block-body > .card:not(.vac-card),.block-body .card.flat{background:none;border:none;box-shadow:none;padding:0;border-radius:0;overflow:visible}
+.block-body > .card:not(.vac-card) + .card:not(.vac-card),.block-body > .grid + .card,.block-body > .card + .grid{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.block-body .grid.c2{gap:16px}
+.block-body .grid.c2 > .card{background:none;border:none;box-shadow:none;padding:0}
+.block-body h3{margin:0 0 12px}
+#panel-zukunft .block-head::after{display:none}
 #panel-zukunft .block-head{cursor:default}
+/* Urlaubsreisen: Karten einzeln, nicht im Block-Rahmen */
+.block[data-block="u-planned"],.block[data-block="u-past"]{background:none;border:none;overflow:visible}
+.block[data-block="u-planned"] > .block-head,.block[data-block="u-past"] > .block-head{background:linear-gradient(160deg,var(--card),var(--bg2));border:1px solid var(--border);border-radius:16px}
+.block[data-block="u-planned"] > .block-body,.block[data-block="u-past"] > .block-body{padding:12px 0 0}
+.block[data-block="u-planned"] .vac-card,.block[data-block="u-past"] .vac-card{margin-bottom:12px}
+.block.collapsed[data-block="u-planned"],.block.collapsed[data-block="u-past"]{margin-top:12px}
 /* Listen */
 .list{display:flex;flex-direction:column}
-.lrow{display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.lrow{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent}
 .lrow:last-of-type{border-bottom:none}
 .lrow:active{background:rgba(148,163,184,.08)}
 .lrow.static{cursor:default}
@@ -169,10 +182,15 @@ details.warn div{margin-top:6px;font-size:13.5px}
 .lsub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .lamt{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .lchev{color:var(--muted);font-size:20px;line-height:1}
-.list-foot{font-size:12.5px;color:var(--muted);padding:10px 4px 0;line-height:1.5}
+.list-foot{font-size:12.5px;color:var(--muted);padding:12px 0 0;line-height:1.5}
 .list-empty{color:var(--muted);text-align:center;padding:16px}
-.cat-head{padding:12px 12px;border-radius:12px;cursor:pointer}
-.cat-head .btn{padding:5px 10px;font-size:12px}
+.cat-head{padding:12px;border-radius:12px;cursor:pointer;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+.cat-head > span:first-child{flex:1 1 auto;min-width:0}
+.cat-group{margin-bottom:12px}
+.cat-head{justify-content:space-between}
+.add-in-cat{width:100%;margin:6px 0 4px;height:40px}
+.chev-btn{display:inline-block;color:var(--muted);transition:transform .15s}
+.chev-btn.rot{transform:rotate(-90deg)}
 /* Urlaubskarten */
 .vac-card{padding:16px}
 .vac-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer}
@@ -201,10 +219,10 @@ details.warn div{margin-top:6px;font-size:13.5px}
 .fab-item{width:100%;text-align:left;padding:15px 16px;font-size:15px}
 body.sheet-open{overflow:hidden}
 /* + Button */
-.fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:30;width:56px;height:56px;border-radius:50%;border:none;
+.fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:30;width:52px;height:52px;border-radius:50%;border:none;
   background:var(--grad);color:#04121f;font-size:30px;line-height:1;cursor:pointer;box-shadow:0 8px 24px rgba(45,212,191,.35)}
 .seg{display:flex;width:100%}
-.seg-btn{flex:1;padding:9px 6px}
+.seg-btn{flex:1;min-width:0;padding:9px 2px;font-size:13px;white-space:nowrap}
 /* ===== Overlay / Dialoge ===== */
 .overlay{display:none;position:fixed;inset:0;z-index:100;background:rgba(5,8,18,.82);backdrop-filter:blur(6px);
   align-items:center;justify-content:center;padding:16px;overflow-y:auto}
@@ -234,7 +252,30 @@ body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
     padding:6px 6px calc(6px + env(safe-area-inset-bottom));flex-wrap:nowrap;gap:2px;display:flex}
   .tab{flex:1;padding:10px 2px;font-size:12.5px;text-align:center;border-radius:12px}
   main{padding:12px 12px 150px}
-  .card{padding:14px}
+  footer{display:none}
+  html,body{overflow-x:hidden}
+  .seg .seg-btn{padding:9px 2px;font-size:13px}
+  input[type=checkbox]{width:20px;height:20px;padding:0;flex:0 0 auto}
+  .radio{align-items:center}
+  .block-body .section-head{margin:18px 0 8px;flex-wrap:nowrap}
+  .block-body .section-head h2{font-size:15px}
+  .block-body .section-head h2::before{display:none}
+  .block-body .section-head .btn{height:36px;padding:0 12px;font-size:13px;white-space:nowrap}
+  .grid.compact{gap:8px}
+  .grid.compact .card{padding:12px}
+  .grid.compact .kpi-label{font-size:10.5px}
+  .grid.compact .kpi-value{font-size:17px}
+  .grid.compact .kpi-sub{display:none}
+  #urlaubBalance{width:110px!important;font-size:17px!important}
+  .card{padding:16px}
+  .tbl{table-layout:fixed;font-size:13px}
+  .tbl th{padding:8px 4px;font-size:10px;letter-spacing:.3px}
+  .tbl td{padding:9px 4px}
+  .tbl th:first-child,.tbl td:first-child{width:31%;padding-left:0}
+  .tbl th:last-child,.tbl td:last-child{padding-right:0}
+  .tbl td.r,.tbl th.r{text-align:right}
+  .tbl th:not(:first-child){text-align:right}
+  main > .panel > .card,.panel > .card,.panel > .grid{margin-top:12px}
   .grid.c2{grid-template-columns:1fr}
   .grid.c3{gap:8px}
   .grid.c3 .card{padding:12px 10px}
@@ -368,7 +409,7 @@ body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
   </div>
 
   <div class="block" data-block="b-costs">
-    <div class="section-head block-head" data-action="toggle-block" data-key="b-costs"><h2>Fixkosten <span class="hint" id="costSum" style="font-weight:400"></span></h2><button class="btn" data-action="add-cost">+ Fixkosten-Position</button></div>
+    <div class="section-head block-head" data-action="toggle-block" data-key="b-costs"><h2>Fixkosten <span class="hint" id="costSum" style="font-weight:400"></span></h2><button class="btn" data-action="add-cost">+ Position</button></div>
     <div class="block-body"><div class="card" id="costGroups"></div></div>
   </div>
 
@@ -419,7 +460,7 @@ body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
   </div>
 
   <div class="block" data-block="u-planned">
-    <div class="section-head block-head" data-action="toggle-block" data-key="u-planned"><h2>Geplante Urlaube</h2><button class="btn primary" data-action="add-vac">+ Urlaub planen</button></div>
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-planned"><h2>Geplante Urlaube</h2><button class="btn primary" data-action="add-vac">+ Reise</button></div>
     <div class="block-body" id="vacListPlanned"></div>
   </div>
 
@@ -429,7 +470,7 @@ body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
   </div>
 
   <div class="block" data-block="u-deps">
-    <div class="section-head block-head" data-action="toggle-block" data-key="u-deps"><h2>Sondereinnahmen für den Urlaubstopf</h2><button class="btn" data-action="add-vacdep">+ Sondereinnahme</button></div>
+    <div class="section-head block-head" data-action="toggle-block" data-key="u-deps"><h2>Sondereinnahmen</h2><button class="btn" data-action="add-vacdep">+ Betrag</button></div>
     <div class="block-body"><div class="card" id="vacDepTable"></div></div>
   </div>
 
@@ -471,7 +512,7 @@ body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
     <div class="bar" style="margin-top:16px"><div class="bar-fill" id="homeBar"></div></div>
     <div class="goal-sub" id="homePct"></div>
   </div>
-  <div class="section-head" style="margin-top:16px"><h2>Sparraten-Staffel (Heute vs. Prognose)</h2><button class="btn" data-action="add-homerate">+ Ratenänderung</button></div>
+  <div class="section-head" style="margin-top:16px"><h2>Sparraten-Staffel</h2><button class="btn" data-action="add-homerate">+ Änderung</button></div>
   <div class="card" id="homeRateTable"></div>
   <div class="card" id="homeChartCard" style="margin-top:16px">
     <h3>Prognose Eigenheim-Sparen</h3>
@@ -518,7 +559,7 @@ body.locked main,body.locked header{filter:blur(12px);pointer-events:none}
   </div>
 
   <div class="block" data-block="zu-assets" data-seg="vermoegen">
-    <div class="section-head block-head" data-action="toggle-block" data-key="zu-assets"><h2>Vermögensprognose bis Stichtag</h2><button class="btn" data-action="add-zasset">+ Vermögenswert</button></div>
+    <div class="section-head block-head" data-action="toggle-block" data-key="zu-assets"><h2>Vermögensprognose bis Stichtag</h2><button class="btn" data-action="add-zasset">+ Wert</button></div>
     <div class="block-body">
       <div class="card" id="zAssetTable"></div>
       <div class="card" style="margin-top:16px"><h3>Heute vs. Prognose</h3><div class="chart-box"><canvas id="chartZAssets"></canvas></div></div>

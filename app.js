@@ -513,9 +513,9 @@ function renderBudget() {
     const collapsed = !openCats.has(cat);
     return `
     <div class="cat-group">
-      <div class="cat-head">
-        <span><button class="btn-icon chev-btn ${collapsed ? "rot" : ""}" data-action="toggle-cat" data-cat="${esc(cat)}" title="Ein-/Ausklappen">▾</button> <span class="cat-name">${esc(cat)}</span></span>
-        <span style="display:flex;align-items:center;gap:10px">${eur(sumM(groups[cat]))} / Monat <button class="btn" data-action="add-cost-cat" data-cat="${esc(cat)}">+ Position</button></span>
+      <div class="cat-head" data-action="toggle-cat" data-cat="${esc(cat)}">
+        <span><span class="chev-btn ${collapsed ? "rot" : ""}">▾</span> <span class="cat-name">${esc(cat)}</span></span>
+        <span>${eur(sumM(groups[cat]))}</span>
       </div>
       ${collapsed ? "" : tableHTML(["Bezeichnung", "Person", "Kategorie", "Betrag", "Rhythmus", "€/Monat", ""],
         groups[cat].map(c => [
@@ -527,12 +527,12 @@ function renderBudget() {
             `<option ${c.rhythm === r ? "selected" : ""}>${r}</option>`).join("")}</select>`,
           `<span class="mono">${eur(monthly(c))}</span>`,
           delBtn(c.id, "costs")
-        ]), null, true)}
+        ]), null) + `<button class="btn add-in-cat" data-action="add-cost-cat" data-cat="${esc(cat)}">+ Position in „${esc(cat)}“</button>`}
     </div>`;
   }).join("");
   document.getElementById("costGroups").innerHTML = catDl + groupHTML +
     `<div class="hint">Neue Kategorie? Einfach beim Hinzufügen einen neuen Namen eintippen – sie erscheint automatisch als Gruppe.</div>`;
-  document.getElementById("costSum").textContent = eur(totalCosts()) + " / Monat gesamt";
+  document.getElementById("costSum").textContent = eur(totalCosts()) + " / Monat";
 
   // Sparraten
   document.getElementById("savingsTable").innerHTML = tableHTML(
